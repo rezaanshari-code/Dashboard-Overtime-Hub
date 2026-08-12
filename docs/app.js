@@ -6,6 +6,14 @@ async function boot(){
   LOC_META = await locRes.json();
 
 const PALETTE = ["#0f9d8c","#e08b2e","#7b4fd6","#d64b6b","#3563e9","#1791b3","#c99a2e","#4f5fd6","#1f9d55","#8a5a3b","#3b8fa3","#a24fd6"];
+
+// plugin label angka di chart — didaftarkan tapi dimatikan secara default,
+// baru diaktifkan per-chart/per-dataset yang memang butuh (lihat renderTrend & renderTopSite)
+if (typeof ChartDataLabels !== 'undefined' && typeof Chart !== 'undefined') {
+  Chart.register(ChartDataLabels);
+  Chart.defaults.set('plugins.datalabels', { display: false });
+}
+const fmtJt = v => (v/1e6).toLocaleString('id-ID', {minimumFractionDigits:1, maximumFractionDigits:1}) + 'Jt';
 function colorFor(name, list){ const i = list.indexOf(name); return PALETTE[i % PALETTE.length]; }
 
 const IDR = n => 'Rp ' + Math.round(n).toLocaleString('id-ID');
@@ -359,10 +367,21 @@ function renderTrend(){
   upsertChart('chartTrend', {
     type:'bar',
     data:{ labels, datasets:[
-      {type:'bar', label:'Total Hour Paid', data:keys.map(k=>byMonth[k].h), backgroundColor:'#e08b2ecc', borderRadius:6, yAxisID:'y1', order:2},
-      {type:'line', label:'Total OT (IDR)', data:keys.map(k=>byMonth[k].idr), borderColor:'#3563e9', backgroundColor:'#3563e9', tension:.35, yAxisID:'y', pointRadius:3, pointBackgroundColor:'#3563e9', order:1}
+      {type:'bar', label:'Total Hour Paid', data:keys.map(k=>byMonth[k].h), backgroundColor:'#e08b2ecc', borderRadius:6, yAxisID:'y1', order:2,
+        datalabels:{
+          display:true, anchor:'center', align:'center',
+          formatter: v => Math.round(v).toLocaleString('id-ID'),
+          font:{size:10.5, weight:'700'}, color:'#ffffff'
+        }},
+      {type:'line', label:'Total OT (IDR)', data:keys.map(k=>byMonth[k].idr), borderColor:'#3563e9', backgroundColor:'#3563e9', tension:.35, yAxisID:'y', pointRadius:3, pointBackgroundColor:'#3563e9', order:1,
+        datalabels:{
+          display:true, align:'top', anchor:'end', offset:6,
+          formatter: v => fmtJt(v),
+          font:{size:10.5, weight:'700'}, color:'#1e3a8a',
+          backgroundColor:'rgba(255,255,255,.9)', borderRadius:4, padding:{top:2,bottom:2,left:5,right:5}
+        }}
     ]},
-    options:{ responsive:true, maintainAspectRatio:false,
+    options:{ responsive:true, maintainAspectRatio:false, layout:{padding:{top:14}},
       scales:{ y:{position:'left', ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}, title:{display:true,text:'OT (IDR)',font:{size:10.5}}},
                y1:{position:'right', grid:{display:false}, title:{display:true,text:'Jam',font:{size:10.5}}} },
       plugins:{legend:{position:'bottom', labels:{boxWidth:10,usePointStyle:true}},
@@ -375,8 +394,13 @@ function renderTopSite(){
   upsertChart('chartTopSite', {
     type:'bar',
     data:{ labels: sites.map(s=>(LOC_META[s.loc]||{}).short||s.loc),
-      datasets:[{ data: sites.map(s=>s.idr), backgroundColor: sites.map(s=> s.bu==='HCI'?'#3563e9':'#e5484d'), borderRadius:6 }]},
-    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      datasets:[{ data: sites.map(s=>s.idr), backgroundColor: sites.map(s=> s.bu==='HCI'?'#3563e9':'#e5484d'), borderRadius:6,
+        datalabels:{
+          display:true, anchor:'end', align:'end', clamp:true,
+          formatter: v => fmtJt(v),
+          font:{size:10.5, weight:'700'}, color:'#1f2937'
+        } }]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, layout:{padding:{right:44}},
       scales:{ x:{ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}}, y:{grid:{display:false}} },
       plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>IDR(c.parsed.x)}}} }
   });
