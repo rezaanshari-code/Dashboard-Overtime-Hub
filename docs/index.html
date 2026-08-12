@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Overtime Hub</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">OT</div>
+      <div class="brand-txt">Dashboard Overtime<span>Hub Delivery Network</span></div>
+    </div>
+
+    <div class="side-block">
+      <div class="side-label">Menu</div>
+      <div class="nav-item active" data-view="overview"><span class="dot"></span>Overview</div>
+      <div class="nav-item" data-view="mpp"><span class="dot"></span>Review MPP</div>
+      <div class="nav-item" data-view="insight"><span class="dot"></span>Insight</div>
+    </div>
+
+    <div class="side-block">
+      <div class="side-label">Sites</div>
+      <div class="hub-item active" id="allHubBtn" style="padding-left:10px; font-weight:700; color:#fff;">
+        <span class="hl"><span class="dotsm" style="background:var(--blue)"></span><span class="nm">All Hub</span></span>
+        <span class="n" id="allHubCount">0</span>
+      </div>
+
+      <div class="site-group">
+        <div class="group-head open" data-grp="HCI">
+          <span class="ghl"><span class="chip" style="background:var(--teal)"></span>HUB HCI</span>
+          <span class="ghl"><span class="cnt" id="cntHCI">0</span><span class="car">&#9656;</span></span>
+        </div>
+        <div class="group-body open" id="bodyHCI"></div>
+      </div>
+
+      <div class="site-group">
+        <div class="group-head open" data-grp="AHI">
+          <span class="ghl"><span class="chip" style="background:var(--amber)"></span>HUB AHI</span>
+          <span class="ghl"><span class="cnt" id="cntAHI">0</span><span class="car">&#9656;</span></span>
+        </div>
+        <div class="group-body open" id="bodyAHI"></div>
+      </div>
+    </div>
+
+    <div class="side-foot">
+      <b>269 karyawan</b> tercatat lembur<br>Periode data: Jan &ndash; Jul 2026
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <h1 id="viewTitle">Overview</h1>
+      <button class="ctrl ghost" id="fullMonthBtn">Semua Periode</button>
+      <input type="date" class="ctrl" id="dateStart">
+      <input type="date" class="ctrl" id="dateEnd">
+      <button class="ctrl primary" id="applyBtn">Terapkan</button>
+      <div class="ctrl"><select id="yearSel"><option value="2026">2026</option></select></div>
+      <div class="ctrl"><select id="monthSel"></select></div>
+      <div class="ctrl"><select id="huSel"><option value="ALL">All Hub</option></select></div>
+      <div class="spacer"></div>
+      <span class="badge-v">v1.0</span>
+      <span class="upd" id="updTime">Update: -</span>
+      <button class="ctrl ghost" id="refreshBtn">&#8635; Refresh</button>
+    </div>
+
+    <div class="content">
+
+      <!-- ================= OVERVIEW ================= -->
+      <section class="view active" id="view-overview">
+        <div class="kpi-row">
+          <div class="kpi" style="--kc:var(--blue)">
+            <div class="lbl"><i></i>Total OT (IDR)</div>
+            <div class="val num" id="kpiIdr">Rp 0</div>
+            <div class="sub" id="kpiIdrSub">-</div>
+          </div>
+          <div class="kpi" style="--kc:var(--teal)">
+            <div class="lbl"><i></i>Jumlah Soken Penerima</div>
+            <div class="val num" id="kpiSoken">0</div>
+            <div class="sub" id="kpiSokenSub">-</div>
+          </div>
+          <div class="kpi" style="--kc:var(--amber)">
+            <div class="lbl"><i></i>Total Hour Paid</div>
+            <div class="val num" id="kpiHour">0</div>
+            <div class="sub" id="kpiHourSub">-</div>
+          </div>
+          <div class="kpi" style="--kc:var(--purple)">
+            <div class="lbl"><i></i>OT IDR per Soken</div>
+            <div class="val num" id="kpiAvg">Rp 0</div>
+            <div class="sub" id="kpiAvgSub">-</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 id="mapTitle">Sebaran Site &mdash; Semua Periode</h2>
+              <p>Ukuran &amp; warna titik mengikuti total OT (IDR). Klik label site untuk detail.</p>
+            </div>
+            <div class="legend-row">
+              <div class="li"><span class="sw" style="background:var(--teal)"></span>HCI</div>
+              <div class="li"><span class="sw" style="background:var(--amber)"></span>AHI</div>
+            </div>
+          </div>
+          <div class="map-wrap">
+            <div id="map"></div>
+            <svg class="svg-overlay" id="svgOverlay"></svg>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head">
+              <div><h2>Tren OT Bulanan</h2><p>Total OT (IDR) dan Total Hour Paid per bulan</p></div>
+            </div>
+            <div class="chart-box tall"><canvas id="chartTrend"></canvas></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <div><h2>Top 8 Site by OT (IDR)</h2><p>Site dengan beban lembur tertinggi</p></div>
+            </div>
+            <div class="chart-box tall"><canvas id="chartTopSite"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= REVIEW MPP ================= -->
+      <section class="view" id="view-mpp">
+        <div class="stat-strip">
+          <div class="stat-mini"><div class="l">Total Soken</div><div class="v num" id="mppSoken">0</div><div class="d">karyawan penerima OT pada periode ini</div></div>
+          <div class="stat-mini"><div class="l">Rata-rata Hari OT / Soken</div><div class="v num" id="mppAvgDays">0</div><div class="d">rata-rata frekuensi lembur per orang</div></div>
+          <div class="stat-mini"><div class="l">Rata-rata Jam OT / Soken</div><div class="v num" id="mppAvgHour">0</div><div class="d">rata-rata jam lembur per orang</div></div>
+        </div>
+
+        <div class="grid-3" style="margin-bottom:18px;">
+          <div class="panel" style="grid-column:span 1;">
+            <div class="panel-head"><div><h2>Distribusi Job Title</h2><p>Driver vs Asst to Driver</p></div></div>
+            <div class="chart-box"><canvas id="chartJobTitle"></canvas></div>
+          </div>
+          <div class="panel" style="grid-column:span 2;">
+            <div class="panel-head"><div><h2>Top 10 Soken by Total OT (IDR)</h2><p>Karyawan dengan akumulasi OT tertinggi pada periode ini</p></div></div>
+            <div class="chart-box"><canvas id="chartTopSoken"></canvas></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div><h2>Detail per Soken (MPP)</h2><p>Rekap akumulasi overtime tiap karyawan pada periode &amp; hub terpilih</p></div>
+            <div class="panel-tools"><input class="searchbox" id="mppSearch" placeholder="Cari nama / ID karyawan..."></div>
+          </div>
+          <div class="tbl-wrap">
+          <table class="dt" id="mppTable">
+            <thead><tr>
+              <th data-k="rank">#</th>
+              <th data-k="id">Employee ID</th>
+              <th data-k="nm">Nama</th>
+              <th data-k="jt">Job Title</th>
+              <th data-k="bu">BU</th>
+              <th data-k="hubs">Hub</th>
+              <th data-k="days">Hari OT</th>
+              <th data-k="h">Total Jam</th>
+              <th data-k="idr">Total OT (IDR)</th>
+            </tr></thead>
+            <tbody id="mppBody"></tbody>
+          </table>
+          </div>
+          <div class="pager">
+            <span id="mppPageInfo">-</span>
+            <div><button id="mppPrev">&larr; Prev</button> <button id="mppNext">Next &rarr;</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= INSIGHT ================= -->
+      <section class="view" id="view-insight">
+        <div class="grid-2" style="margin-bottom:18px;">
+          <div class="panel">
+            <div class="panel-head"><div><h2>Jenis Overtime (OT Type)</h2><p>Kontribusi tiap jenis pekerjaan lembur terhadap total OT (IDR)</p></div></div>
+            <div class="chart-box tall"><canvas id="chartOtType"></canvas></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><h2>Pola OT per Hari</h2><p>Total OT (IDR) berdasarkan hari dalam seminggu</p></div></div>
+            <div class="chart-box tall"><canvas id="chartDow"></canvas></div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-bottom:18px;">
+          <div class="panel-head"><div><h2>Perbandingan Hub: HCI vs AHI</h2><p>Total OT (IDR) &amp; Total Hour Paid per bulan, dipecah per Business Unit</p></div></div>
+          <div class="chart-box tall"><canvas id="chartBuMonth"></canvas></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div><h2>Ranking Site (Semua Site)</h2><p>Rekap lengkap per site pada periode &amp; hub terpilih</p></div>
+          </div>
+          <div class="tbl-wrap">
+          <table class="dt" id="siteTable">
+            <thead><tr>
+              <th data-k="rank">#</th>
+              <th data-k="loc">Site</th>
+              <th data-k="bu">BU</th>
+              <th data-k="soken">Soken</th>
+              <th data-k="rows">Baris</th>
+              <th data-k="h">Total Jam</th>
+              <th data-k="idr">Total OT (IDR)</th>
+              <th data-k="avg">IDR / Soken</th>
+            </tr></thead>
+            <tbody id="siteBody"></tbody>
+          </table>
+          </div>
+        </div>
+      </section>
+
+      <div class="foot-note">Dashboard Overtime Hub &middot; Data periode Januari &ndash; Juli 2026 &middot; dibuat otomatis dari Master Overtime spreadsheet</div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
