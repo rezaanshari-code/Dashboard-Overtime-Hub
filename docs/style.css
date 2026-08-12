@@ -190,7 +190,7 @@ input[type=date].ctrl{cursor:text; color:var(--ink-soft); font-weight:500;}
 .grid-2{display:grid; grid-template-columns:1.35fr 1fr; gap:18px;}
 .grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:18px;}
 
-.map-wrap{position:relative; border-radius:12px; overflow:hidden; height:560px; border:1px solid var(--line);}
+.map-wrap{position:relative; z-index:0; isolation:isolate; border-radius:12px; overflow:hidden; height:560px; border:1px solid var(--line);}
 #map{width:100%;height:100%; background:#dbe4ee;}
 .label-overlay{position:absolute; inset:0; z-index:401; pointer-events:none;}
 .site-label{
