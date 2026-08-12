@@ -196,13 +196,14 @@ document.getElementById('refreshBtn').addEventListener('click', ()=>{
 document.getElementById('updTime').textContent = 'Update: ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
 
 // ================= MAP =================
-let map, svgOv, markers=[], mapLayer;
+let map, svgOv, labelOv, markers=[], mapLayer;
 function initMap(){
   map = L.map('map', {zoomControl:true, scrollWheelZoom:false}).setView([-3.5, 112], 5);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 12
   }).addTo(map);
   svgOv = document.getElementById('svgOverlay');
+  labelOv = document.getElementById('labelOverlay');
   map.on('move zoom', drawLines);
   map.on('moveend zoomend', drawLines);
 }
@@ -218,15 +219,25 @@ function siteAgg(){
   return Object.values(m).map(s=>({...s, soken:s.soken.size})).sort((a,b)=>b.idr-a.idr);
 }
 
+function IDRk(n){
+  if(n>=1e6) return 'Rp ' + (n/1e6).toLocaleString('id-ID', {maximumFractionDigits:1}) + ' Jt';
+  if(n>=1e3) return 'Rp ' + (n/1e3).toLocaleString('id-ID', {maximumFractionDigits:0}) + ' Rb';
+  return IDR(n);
+}
+
 function drawLines(){
   if(!svgOv || !markers.length) return;
   const rect = document.querySelector('.map-wrap').getBoundingClientRect();
   svgOv.setAttribute('width', rect.width); svgOv.setAttribute('height', rect.height);
-  let html='';
+  let html = `<defs>
+    <marker id="arrowHci" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="${getComputedStyle(document.documentElement).getPropertyValue('--hci').trim()}"/></marker>
+    <marker id="arrowAhi" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="${getComputedStyle(document.documentElement).getPropertyValue('--ahi').trim()}"/></marker>
+  </defs>`;
   markers.forEach(mk=>{
     const p = map.latLngToContainerPoint(mk.latlng);
     const lp = mk.labelPoint;
-    html += `<line x1="${p.x}" y1="${p.y}" x2="${lp.x}" y2="${lp.y}" stroke="${mk.color}" stroke-width="1.4" stroke-dasharray="4 3" opacity="0.75"/>`;
+    const arrowId = mk.bu==='HCI' ? 'arrowHci' : 'arrowAhi';
+    html += `<line x1="${lp.x}" y1="${lp.y}" x2="${p.x}" y2="${p.y}" stroke="${mk.color}" stroke-width="1.4" stroke-dasharray="4 3" opacity="0.85" marker-end="url(#${arrowId})"/>`;
     html += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${mk.color}" stroke="#fff" stroke-width="1.5"/>`;
   });
   svgOv.innerHTML = html;
@@ -234,7 +245,8 @@ function drawLines(){
 
 function renderMap(){
   if(!map) initMap();
-  markers.forEach(m=>{ if(m.marker) map.removeLayer(m.marker); if(m.labelEl) map.removeLayer(m.labelEl); });
+  markers.forEach(m=>{ if(m.marker) map.removeLayer(m.marker); });
+  if(labelOv) labelOv.innerHTML = '';
   markers = [];
 
   let sites = siteAgg();
@@ -249,30 +261,44 @@ function renderMap(){
   if(sites.length===0){ drawLines(); return; }
   const maxIdr = Math.max(...sites.map(s=>s.idr), 1);
 
-  const leftSites = sites.filter((s,i)=> (LOC_META[s.loc]||{lng:0}).lng < 108);
-  const rightSites = sites.filter((s,i)=> (LOC_META[s.loc]||{lng:0}).lng >= 108);
+  const leftSites = sites.filter((s)=> (LOC_META[s.loc]||{lng:0}).lng < 108);
+  const rightSites = sites.filter((s)=> (LOC_META[s.loc]||{lng:0}).lng >= 108);
 
   function place(list, side){
     const rect = document.querySelector('.map-wrap').getBoundingClientRect();
-    const startY = 40;
-    const gapY = Math.min(64, (rect.height-80)/Math.max(list.length,1));
+    const cardW = 172, margin = 14, gapMin = 50;
+    const startY = 30;
+    const gapY = Math.max(gapMin, Math.min(78, (rect.height - startY*2)/Math.max(list.length,1)));
     list.forEach((s,i)=>{
-      const meta = LOC_META[s.loc] || {lat:-2,lng:117};
+      const meta = LOC_META[s.loc] || {lat:-2,lng:117, short:s.loc};
       const latlng = L.latLng(meta.lat, meta.lng);
       const color = s.bu==='HCI' ? getComputedStyle(document.documentElement).getPropertyValue('--hci').trim() : getComputedStyle(document.documentElement).getPropertyValue('--ahi').trim();
       const r = 5 + Math.round((s.idr/maxIdr)*9);
       const marker = L.circleMarker(latlng, {radius:r, color:'#fff', weight:1.5, fillColor:color, fillOpacity:0.9}).addTo(map);
       marker.bindPopup(`<b>${meta.short||s.loc}</b><br>${s.bu}<br>OT: ${IDR(s.idr)}<br>Jam: ${H1(s.h)}<br>Soken: ${s.soken}`);
 
-      const labelPointX = side==='L' ? 118 : rect.width-118;
-      const labelPointY = startY + i*gapY + 10;
-      const html = `<div class="site-label" style="background:${color}">${meta.short||s.loc}<small>${IDR(s.idr)}</small></div>`;
-      const icon = L.divIcon({html, className:'', iconSize:[0,0]});
-      const labelLatLng = map.containerPointToLatLng(L.point(labelPointX, labelPointY));
-      const labelMarker = L.marker(labelLatLng, {icon, interactive:true}).addTo(map);
-      labelMarker.on('click', ()=> marker.openPopup());
+      const cardX = side==='L' ? margin : rect.width - margin - cardW;
+      const cardY = startY + i*gapY;
 
-      markers.push({marker, labelEl:labelMarker, latlng, labelPoint:L.point(side==='L'?labelPointX+52:labelPointX-52, labelPointY+9), color});
+      // label sebagai elemen HTML biasa (bukan Leaflet marker) supaya tidak
+      // kepotong batas peta & bisa menerima klik dengan andal
+      const div = document.createElement('div');
+      div.className = 'site-label';
+      div.style.left = cardX + 'px';
+      div.style.top = cardY + 'px';
+      div.style.background = color;
+      div.innerHTML = `<span class="nm">${meta.short||s.loc}</span><small>${IDRk(s.idr)}</small>`;
+      div.addEventListener('click', ()=>{
+        state.site = s.loc + '::' + s.bu; state.hub = 'ALL';
+        document.getElementById('huSel').value = 'loc:' + state.site;
+        setActiveSite();
+        renderAll();
+        setTimeout(()=> marker.openPopup(), 80);
+      });
+      labelOv.appendChild(div);
+
+      const labelPoint = L.point(cardX + (side==='L'? cardW : 0), cardY + 20);
+      markers.push({marker, labelEl:div, latlng, labelPoint, color, side, bu:s.bu});
     });
   }
   place(leftSites,'L');
@@ -318,18 +344,19 @@ function renderTrend(){
   upsertChart('chartTrend', {
     type:'bar',
     data:{ labels, datasets:[
-      {type:'bar', label:'Total OT (IDR)', data:keys.map(k=>byMonth[k].idr), backgroundColor:'#3563e9cc', borderRadius:6, yAxisID:'y'},
-      {type:'line', label:'Total Jam', data:keys.map(k=>byMonth[k].h), borderColor:'#e08b2e', backgroundColor:'#e08b2e', tension:.35, yAxisID:'y1', pointRadius:3}
+      {type:'bar', label:'Total Hour Paid', data:keys.map(k=>byMonth[k].h), backgroundColor:'#e08b2ecc', borderRadius:6, yAxisID:'y1', order:2},
+      {type:'line', label:'Total OT (IDR)', data:keys.map(k=>byMonth[k].idr), borderColor:'#3563e9', backgroundColor:'#3563e9', tension:.35, yAxisID:'y', pointRadius:3, pointBackgroundColor:'#3563e9', order:1}
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
-      scales:{ y:{position:'left', ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}},
-               y1:{position:'right', grid:{display:false}} },
-      plugins:{legend:{position:'bottom', labels:{boxWidth:10,usePointStyle:true}}} }
+      scales:{ y:{position:'left', ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}, title:{display:true,text:'OT (IDR)',font:{size:10.5}}},
+               y1:{position:'right', grid:{display:false}, title:{display:true,text:'Jam',font:{size:10.5}}} },
+      plugins:{legend:{position:'bottom', labels:{boxWidth:10,usePointStyle:true}},
+        tooltip:{callbacks:{label:c=> c.dataset.label + ': ' + (c.dataset.label==='Total Hour Paid' ? H1(c.parsed.y)+' jam' : IDR(c.parsed.y)) }} } }
   });
 }
 
 function renderTopSite(){
-  const sites = siteAgg().slice(0,8);
+  const sites = siteAgg().slice(0,10);
   upsertChart('chartTopSite', {
     type:'bar',
     data:{ labels: sites.map(s=>(LOC_META[s.loc]||{}).short||s.loc),
@@ -499,13 +526,17 @@ function renderBuMonth(){
 }
 
 // ================= MASTER RENDER =================
+function safeRun(fn){
+  try{ fn(); } catch(err){ console.error('render error in', fn.name, err); }
+}
+
 function renderAll(){
   if(state.view==='overview'){
-    renderKPI(); renderMap(); renderTrend(); renderTopSite();
+    [renderKPI, renderMap, renderTrend, renderTopSite].forEach(safeRun);
   } else if(state.view==='mpp'){
-    renderMppStats(); renderJobTitleChart(); renderTopSoken(); renderMppTable();
+    [renderMppStats, renderJobTitleChart, renderTopSoken, renderMppTable].forEach(safeRun);
   } else if(state.view==='insight'){
-    renderOtType(); renderDow(); renderBuMonth(); renderSiteTable();
+    [renderOtType, renderDow, renderBuMonth, renderSiteTable].forEach(safeRun);
   }
 }
 
