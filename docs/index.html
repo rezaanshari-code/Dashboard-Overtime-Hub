@@ -13,44 +13,50 @@
 <div class="app">
 
   <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <div class="brand-mark">OT</div>
-      <div class="brand-txt">Dashboard Overtime<span>Hub Delivery Network</span></div>
-    </div>
-
-    <div class="side-block">
-      <div class="side-label">Menu</div>
-      <div class="nav-item active" data-view="overview"><span class="dot"></span>Overview</div>
-      <div class="nav-item" data-view="mpp"><span class="dot"></span>Review MPP</div>
-      <div class="nav-item" data-view="insight"><span class="dot"></span>Insight</div>
-    </div>
-
-    <div class="side-block">
-      <div class="side-label">Sites</div>
-      <div class="hub-item active" id="allHubBtn" style="padding-left:10px; font-weight:700; color:#fff;">
-        <span class="hl"><span class="dotsm" style="background:var(--blue)"></span><span class="nm">All Hub</span></span>
-        <span class="n" id="allHubCount">0</span>
+    <div class="sidebar-fixed-top">
+      <div class="brand">
+        <div class="brand-mark">OT</div>
+        <div class="brand-txt">Dashboard Overtime<span>Hub Delivery Network</span></div>
       </div>
 
-      <div class="site-group">
-        <div class="group-head open" data-grp="HCI">
-          <span class="ghl"><span class="chip" style="background:var(--teal)"></span>HUB HCI</span>
-          <span class="ghl"><span class="cnt" id="cntHCI">0</span><span class="car">&#9656;</span></span>
+      <div class="side-block">
+        <div class="side-label">Menu</div>
+        <div class="nav-item active" data-view="overview"><span class="dot"></span>Overview</div>
+        <div class="nav-item" data-view="mpp"><span class="dot"></span>Review MPP</div>
+        <div class="nav-item" data-view="insight"><span class="dot"></span>Insight</div>
+      </div>
+    </div>
+
+    <div class="sidebar-scroll">
+      <div class="side-block">
+        <div class="side-label">Sites</div>
+        <div class="hub-item active" id="allHubBtn" style="padding-left:10px; font-weight:700; color:#fff;">
+          <span class="hl"><span class="dotsm" style="background:var(--all)"></span><span class="nm">All Hub</span></span>
         </div>
-        <div class="group-body open" id="bodyHCI"></div>
-      </div>
 
-      <div class="site-group">
-        <div class="group-head open" data-grp="AHI">
-          <span class="ghl"><span class="chip" style="background:var(--amber)"></span>HUB AHI</span>
-          <span class="ghl"><span class="cnt" id="cntAHI">0</span><span class="car">&#9656;</span></span>
+        <div class="site-group">
+          <div class="group-head open" data-grp="HCI">
+            <span class="ghl grp-filter" data-hub="HCI"><span class="chip" style="background:var(--hci)"></span>HUB HCI</span>
+            <span class="grp-toggle" data-grp-toggle="HCI"><span class="car">&#9656;</span></span>
+          </div>
+          <div class="group-body open" id="bodyHCI"></div>
         </div>
-        <div class="group-body open" id="bodyAHI"></div>
+
+        <div class="site-group">
+          <div class="group-head open" data-grp="AHI">
+            <span class="ghl grp-filter" data-hub="AHI"><span class="chip" style="background:var(--ahi)"></span>HUB AHI</span>
+            <span class="grp-toggle" data-grp-toggle="AHI"><span class="car">&#9656;</span></span>
+          </div>
+          <div class="group-body open" id="bodyAHI"></div>
+        </div>
       </div>
     </div>
 
-    <div class="side-foot">
-      <b>269 karyawan</b> tercatat lembur<br>Periode data: Jan &ndash; Jul 2026
+    <div class="sidebar-fixed-bottom">
+      <div class="side-foot">
+        <b>269 karyawan</b> tercatat lembur<br>Periode data: Jan &ndash; Jul 2026
+      </div>
+      <a class="back-btn" href="https://rezaanshari-code.github.io/All-Dashboard-Hub/">&larr; Back to All Dashboard</a>
     </div>
   </aside>
 
@@ -104,8 +110,8 @@
               <p>Ukuran &amp; warna titik mengikuti total OT (IDR). Klik label site untuk detail.</p>
             </div>
             <div class="legend-row">
-              <div class="li"><span class="sw" style="background:var(--teal)"></span>HCI</div>
-              <div class="li"><span class="sw" style="background:var(--amber)"></span>AHI</div>
+              <div class="li"><span class="sw" style="background:var(--hci)"></span>HCI</div>
+              <div class="li"><span class="sw" style="background:var(--ahi)"></span>AHI</div>
             </div>
           </div>
           <div class="map-wrap">
