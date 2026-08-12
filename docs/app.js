@@ -32,14 +32,20 @@ const state = {
 };
 
 // ================= FILTERING =================
+// state.site disimpan sebagai "LOCATION::BU" (bukan cuma nama lokasi), karena
+// beberapa site (Denpasar, Sawojajar) dipakai oleh HCI maupun AHI sekaligus.
 function filteredRecords(){
   return RECORDS.filter(r=>{
     if(r.dt < state.start || r.dt > state.end) return false;
-    if(state.site){ return r.loc === state.site; }
+    if(state.site){
+      const [loc,bu] = state.site.split('::');
+      return r.loc === loc && r.bu === bu;
+    }
     if(state.hub !== 'ALL'){ return r.bu === state.hub; }
     return true;
   });
 }
+function siteLoc(){ return state.site ? state.site.split('::')[0] : null; }
 
 function aggBase(rows){
   let idr=0,h=0; const soken=new Set();
@@ -54,10 +60,9 @@ function buildSidebar(){
 
   function rowHtml(loc, bu){
     const meta = LOC_META[loc] || {short:loc};
-    const dot = bu==='HCI' ? 'var(--teal)' : 'var(--amber)';
+    const dot = bu==='HCI' ? 'var(--hci)' : 'var(--ahi)';
     return `<div class="hub-item" data-site="${loc}" data-bu="${bu}">
       <span class="hl"><span class="dotsm" style="background:${dot}"></span><span class="nm">${meta.short}</span></span>
-      <span class="n" data-cnt="${loc}|${bu}">0</span>
     </div>`;
   }
   document.getElementById('bodyHCI').innerHTML = hciLocs.map(l=>rowHtml(l,'HCI')).join('');
@@ -66,52 +71,60 @@ function buildSidebar(){
   // hub select dropdown
   const sel = document.getElementById('huSel');
   const opts = ['<option value="ALL">All Hub</option>', '<option value="HCI">Hub HCI (Semua Site)</option>', '<option value="AHI">Hub AHI (Semua Site)</option>'];
-  hciLocs.forEach(l=> opts.push(`<option value="loc:${l}">${(LOC_META[l]||{}).short||l} (HCI)</option>`));
-  ahiLocs.forEach(l=> opts.push(`<option value="loc:${l}">${(LOC_META[l]||{}).short||l} (AHI)</option>`));
+  hciLocs.forEach(l=> opts.push(`<option value="loc:${l}::HCI">${(LOC_META[l]||{}).short||l} (HCI)</option>`));
+  ahiLocs.forEach(l=> opts.push(`<option value="loc:${l}::AHI">${(LOC_META[l]||{}).short||l} (AHI)</option>`));
   sel.innerHTML = opts.join('');
 
+  // klik site individual -> filter ke site itu (loc + BU spesifik, karena ada
+  // nama site yang dipakai 2 BU sekaligus, misal Denpasar & Sawojajar)
   document.querySelectorAll('.hub-item[data-site]').forEach(el=>{
     el.addEventListener('click', ()=>{
-      state.site = el.dataset.site; state.hub = 'ALL';
-      sel.value = 'loc:'+el.dataset.site;
+      state.site = el.dataset.site + '::' + el.dataset.bu; state.hub = 'ALL';
+      sel.value = 'loc:' + state.site;
       setActiveSite();
       renderAll();
     });
   });
+
+  // klik "All Hub" -> reset semua filter hub/site
   document.getElementById('allHubBtn').addEventListener('click', ()=>{
     state.site=null; state.hub='ALL'; sel.value='ALL'; setActiveSite(); renderAll();
   });
 
-  document.querySelectorAll('.group-head').forEach(gh=>{
-    gh.addEventListener('click', ()=>{
-      gh.classList.toggle('open');
-      document.getElementById('body'+gh.dataset.grp).classList.toggle('open');
+  // klik label "HUB HCI" / "HUB AHI" -> filter semua site dalam BU itu sekaligus
+  document.querySelectorAll('.grp-filter').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      state.hub = el.dataset.hub; state.site = null;
+      sel.value = el.dataset.hub;
+      setActiveSite();
+      renderAll();
+    });
+  });
+
+  // klik chevron -> cuma expand/collapse, gak filter apa-apa
+  document.querySelectorAll('.grp-toggle').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const grp = el.dataset.grpToggle;
+      document.querySelector(`.group-head[data-grp="${grp}"]`).classList.toggle('open');
+      document.getElementById('body'+grp).classList.toggle('open');
     });
   });
 }
 
 function setActiveSite(){
   document.querySelectorAll('.hub-item').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.group-head').forEach(e=>e.classList.remove('selected'));
+  document.getElementById('allHubBtn').classList.remove('active');
+
   if(state.site){
-    document.querySelectorAll(`.hub-item[data-site="${state.site}"]`).forEach(e=>e.classList.add('active'));
+    const [loc,bu] = state.site.split('::');
+    document.querySelectorAll(`.hub-item[data-site="${loc}"][data-bu="${bu}"]`).forEach(e=>e.classList.add('active'));
+  } else if(state.hub === 'HCI' || state.hub === 'AHI'){
+    document.querySelector(`.group-head[data-grp="${state.hub}"]`).classList.add('selected');
   } else {
     document.getElementById('allHubBtn').classList.add('active');
   }
-}
-
-function updateSidebarCounts(){
-  const all = filteredRecords();
-  document.getElementById('allHubCount').textContent = NUM(new Set(all.map(r=>r.id)).size);
-
-  ['HCI','AHI'].forEach(bu=>{
-    const buRows = RECORDS.filter(r=> r.bu===bu && r.dt>=state.start && r.dt<=state.end);
-    document.getElementById('cnt'+bu).textContent = NUM(new Set(buRows.map(r=>r.id)).size);
-    Array.from(locByBu[bu]).forEach(loc=>{
-      const rows = buRows.filter(r=>r.loc===loc);
-      const el = document.querySelector(`[data-cnt="${loc}|${bu}"]`);
-      if(el) el.textContent = NUM(rows.reduce((a,r)=>a+r.idr,0)/1000)+'K';
-    });
-  });
 }
 
 // ================= NAV =================
@@ -168,7 +181,7 @@ document.getElementById('huSel').addEventListener('change', (e)=>{
   const v = e.target.value;
   if(v==='ALL'){ state.hub='ALL'; state.site=null; }
   else if(v==='HCI' || v==='AHI'){ state.hub=v; state.site=null; }
-  else if(v.startsWith('loc:')){ state.site = v.slice(4); state.hub='ALL'; }
+  else if(v.startsWith('loc:')){ state.site = v.slice(4); state.hub='ALL'; } // v.slice(4) sudah format "LOC::BU"
   setActiveSite();
   renderAll();
 });
@@ -225,7 +238,10 @@ function renderMap(){
   markers = [];
 
   let sites = siteAgg();
-  if(state.site) sites = sites.filter(s=>s.loc===state.site);
+  if(state.site){
+    const [loc,bu] = state.site.split('::');
+    sites = sites.filter(s=>s.loc===loc && s.bu===bu);
+  }
   sites = sites.slice(0, 14);
 
   document.getElementById('mapTitle').textContent = 'Sebaran Site — ' + periodLabel();
@@ -243,7 +259,7 @@ function renderMap(){
     list.forEach((s,i)=>{
       const meta = LOC_META[s.loc] || {lat:-2,lng:117};
       const latlng = L.latLng(meta.lat, meta.lng);
-      const color = s.bu==='HCI' ? getComputedStyle(document.documentElement).getPropertyValue('--teal').trim() : getComputedStyle(document.documentElement).getPropertyValue('--amber').trim();
+      const color = s.bu==='HCI' ? getComputedStyle(document.documentElement).getPropertyValue('--hci').trim() : getComputedStyle(document.documentElement).getPropertyValue('--ahi').trim();
       const r = 5 + Math.round((s.idr/maxIdr)*9);
       const marker = L.circleMarker(latlng, {radius:r, color:'#fff', weight:1.5, fillColor:color, fillOpacity:0.9}).addTo(map);
       marker.bindPopup(`<b>${meta.short||s.loc}</b><br>${s.bu}<br>OT: ${IDR(s.idr)}<br>Jam: ${H1(s.h)}<br>Soken: ${s.soken}`);
@@ -317,7 +333,7 @@ function renderTopSite(){
   upsertChart('chartTopSite', {
     type:'bar',
     data:{ labels: sites.map(s=>(LOC_META[s.loc]||{}).short||s.loc),
-      datasets:[{ data: sites.map(s=>s.idr), backgroundColor: sites.map(s=> s.bu==='HCI'?'#0f9d8c':'#e08b2e'), borderRadius:6 }]},
+      datasets:[{ data: sites.map(s=>s.idr), backgroundColor: sites.map(s=> s.bu==='HCI'?'#3563e9':'#e5484d'), borderRadius:6 }]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
       scales:{ x:{ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}}, y:{grid:{display:false}} },
       plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>IDR(c.parsed.x)}}} }
@@ -473,8 +489,8 @@ function renderBuMonth(){
   upsertChart('chartBuMonth', {
     type:'bar',
     data:{ labels, datasets:[
-      {label:'HCI', data:keys.map(k=>m[k].HCI||0), backgroundColor:'#0f9d8ccc', borderRadius:5},
-      {label:'AHI', data:keys.map(k=>m[k].AHI||0), backgroundColor:'#e08b2ecc', borderRadius:5},
+      {label:'HCI', data:keys.map(k=>m[k].HCI||0), backgroundColor:'#3563e9cc', borderRadius:5},
+      {label:'AHI', data:keys.map(k=>m[k].AHI||0), backgroundColor:'#e5484dcc', borderRadius:5},
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
       scales:{ y:{ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}}, x:{grid:{display:false}} },
@@ -484,7 +500,6 @@ function renderBuMonth(){
 
 // ================= MASTER RENDER =================
 function renderAll(){
-  updateSidebarCounts();
   if(state.view==='overview'){
     renderKPI(); renderMap(); renderTrend(); renderTopSite();
   } else if(state.view==='mpp'){
