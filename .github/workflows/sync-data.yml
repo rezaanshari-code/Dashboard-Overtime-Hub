@@ -1,0 +1,37 @@
+name: Sync Data dari Google Sheets
+
+on:
+  schedule:
+    # 00:00 UTC = 07:00 WIB (Indonesia tidak pakai daylight saving, jadi fix)
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}   # tombol "Run workflow" manual di tab Actions
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Jalankan sync
+        run: python3 scripts/sync_data.py
+
+      - name: Commit & push kalau ada perubahan data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- docs/data.json docs/hub_coords.json; then
+            echo "Tidak ada perubahan data, skip commit."
+          else
+            git add docs/data.json docs/hub_coords.json
+            git commit -m "chore: sync data overtime $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
