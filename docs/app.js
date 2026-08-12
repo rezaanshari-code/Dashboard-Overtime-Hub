@@ -53,6 +53,20 @@ function aggBase(rows){
   return {idr,h,soken:soken.size,rows:rows.length};
 }
 
+// Khusus buat "Tren OT Bulanan": selalu tampilkan seluruh periode data
+// (tidak ikut filter tanggal/bulan di atas), tapi tetap ikut filter site/hub
+// yang dipilih di sidebar/dropdown.
+function trendRecords(){
+  return RECORDS.filter(r=>{
+    if(state.site){
+      const [loc,bu] = state.site.split('::');
+      return r.loc === loc && r.bu === bu;
+    }
+    if(state.hub !== 'ALL'){ return r.bu === state.hub; }
+    return true;
+  });
+}
+
 // ================= SIDEBAR BUILD =================
 function buildSidebar(){
   const hciLocs = Array.from(locByBu.HCI).sort();
@@ -333,7 +347,7 @@ function renderKPI(){
 }
 
 function renderTrend(){
-  const rows = filteredRecords();
+  const rows = trendRecords();
   const byMonth = {};
   rows.forEach(r=>{
     const mk = r.dt.slice(0,7);
