@@ -266,9 +266,9 @@ function renderMap(){
 
   function place(list, side){
     const rect = document.querySelector('.map-wrap').getBoundingClientRect();
-    const cardW = 172, margin = 14, gapMin = 50;
-    const startY = 30;
-    const gapY = Math.max(gapMin, Math.min(78, (rect.height - startY*2)/Math.max(list.length,1)));
+    const cardW = 172, margin = 14, gapMin = 52;
+    const startY = 58; // turun sedikit biar gak ketiban tombol zoom (+/-) peta
+    const gapY = Math.max(gapMin, Math.min(78, (rect.height - startY - 20)/Math.max(list.length,1)));
     list.forEach((s,i)=>{
       const meta = LOC_META[s.loc] || {lat:-2,lng:117, short:s.loc};
       const latlng = L.latLng(meta.lat, meta.lng);
@@ -293,7 +293,8 @@ function renderMap(){
         document.getElementById('huSel').value = 'loc:' + state.site;
         setActiveSite();
         renderAll();
-        setTimeout(()=> marker.openPopup(), 80);
+        // ambil ulang marker terbaru (yang lama jadi stale setelah renderMap render ulang)
+        setTimeout(()=>{ if(markers[0]) markers[0].marker.openPopup(); }, 100);
       });
       labelOv.appendChild(div);
 
