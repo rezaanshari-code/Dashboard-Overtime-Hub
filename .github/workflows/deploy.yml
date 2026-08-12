@@ -4,6 +4,12 @@ on:
   push:
     branches: ["main"]
   workflow_dispatch:
+  # Commit otomatis dari workflow "Sync Data" tidak trigger event "push" biasa
+  # (batasan default GITHUB_TOKEN dari GitHub), jadi deploy juga didengerin
+  # lewat selesainya workflow sync ini:
+  workflow_run:
+    workflows: ["Sync Data dari Google Sheets"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -16,6 +22,8 @@ concurrency:
 
 jobs:
   deploy:
+    # kalau ke-trigger dari workflow_run, cuma lanjut deploy kalau sync-nya sukses
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -23,6 +31,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # pastikan checkout commit terbaru (termasuk hasil commit dari sync workflow)
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
