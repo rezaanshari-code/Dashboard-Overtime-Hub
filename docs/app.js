@@ -14,6 +14,7 @@ if (typeof ChartDataLabels !== 'undefined' && typeof Chart !== 'undefined') {
   Chart.defaults.set('plugins.datalabels', { display: false });
 }
 const fmtJt = v => (v/1e6).toLocaleString('id-ID', {minimumFractionDigits:1, maximumFractionDigits:1}) + 'Jt';
+const fmtRp = v => 'Rp' + (v/1e6).toLocaleString('id-ID', {minimumFractionDigits:1, maximumFractionDigits:1}) + ' Jt';
 function colorFor(name, list){ const i = list.indexOf(name); return PALETTE[i % PALETTE.length]; }
 
 const IDR = n => 'Rp ' + Math.round(n).toLocaleString('id-ID');
@@ -230,8 +231,8 @@ function initMap(){
   map.on('moveend zoomend', drawLines);
 }
 
-function siteAgg(){
-  const rows = filteredRecords();
+function siteAgg(rows){
+  rows = rows || filteredRecords();
   const m = {}; // key = loc|bu
   rows.forEach(r=>{
     const k = r.loc+'|'+r.bu;
@@ -239,6 +240,13 @@ function siteAgg(){
     m[k].idr += r.idr; m[k].h += r.h; m[k].soken.add(r.id); m[k].rows++;
   });
   return Object.values(m).map(s=>({...s, soken:s.soken.size})).sort((a,b)=>b.idr-a.idr);
+}
+
+// Khusus chart "Top 10 Site": selalu bandingkan 10 site teratas se-Indonesia
+// (ikut filter tanggal, tapi TIDAK ikut filter site/hub yang lagi dipilih di
+// sidebar), supaya site yang dipilih tetap kelihatan posisinya vs yang lain.
+function topSiteRecords(){
+  return RECORDS.filter(r => r.dt >= state.start && r.dt <= state.end);
 }
 
 function IDRk(n){
@@ -390,18 +398,37 @@ function renderTrend(){
 }
 
 function renderTopSite(){
-  const sites = siteAgg().slice(0,10);
+  const sites = siteAgg(topSiteRecords()).slice(0,10);
+
+  // tandai site mana yang lagi kepilih di sidebar/dropdown, biar tetap
+  // kelihatan posisinya dibanding 10 besar lainnya (bukan cuma nampilin 1 bar)
+  const isSelected = (s) => {
+    if(state.site){ const [loc,bu] = state.site.split('::'); return s.loc===loc && s.bu===bu; }
+    if(state.hub === 'HCI' || state.hub === 'AHI'){ return s.bu === state.hub; }
+    return null; // gak ada filter aktif -> null = semua dianggap "normal"
+  };
+  const anyFilterActive = state.site || state.hub === 'HCI' || state.hub === 'AHI';
+
+  const colors = sites.map(s=>{
+    const base = s.bu==='HCI' ? '#3563e9' : '#e5484d';
+    if(!anyFilterActive) return base;
+    return isSelected(s) ? base : (s.bu==='HCI' ? '#c7d4f7' : '#f7c9cd'); // di-dim kalau bukan yang dipilih
+  });
+  const borders = sites.map(s => anyFilterActive && isSelected(s) ? '#0f172a' : 'transparent');
+
   upsertChart('chartTopSite', {
     type:'bar',
     data:{ labels: sites.map(s=>(LOC_META[s.loc]||{}).short||s.loc),
-      datasets:[{ data: sites.map(s=>s.idr), backgroundColor: sites.map(s=> s.bu==='HCI'?'#3563e9':'#e5484d'), borderRadius:6,
+      datasets:[{ data: sites.map(s=>s.idr), backgroundColor: colors, borderColor: borders, borderWidth:2, borderRadius:6,
         datalabels:{
           display:true, anchor:'end', align:'end', clamp:true,
           formatter: v => fmtJt(v),
-          font:{size:10.5, weight:'700'}, color:'#1f2937'
+          font:(ctx)=>({size:10.5, weight: anyFilterActive && isSelected(sites[ctx.dataIndex]) ? '800':'700'}),
+          color:(ctx)=> anyFilterActive && !isSelected(sites[ctx.dataIndex]) ? '#9aa5bf' : '#1f2937'
         } }]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, layout:{padding:{right:44}},
-      scales:{ x:{ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}}, y:{grid:{display:false}} },
+      scales:{ x:{ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}},
+               y:{grid:{display:false}, ticks:{ font:(ctx)=>({ weight: anyFilterActive && isSelected(sites[ctx.index]) ? '800':'400' }) }} },
       plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>IDR(c.parsed.x)}}} }
   });
 }
@@ -445,9 +472,15 @@ function renderJobTitleChart(){
   const rows = filteredRecords();
   const soken = sokenAgg();
   const d = soken.filter(s=>s.jt==='D').length, a = soken.filter(s=>s.jt==='A').length;
+  const total = d + a;
   upsertChart('chartJobTitle', {
     type:'doughnut',
-    data:{ labels:['Driver','Asst to Driver'], datasets:[{data:[d,a], backgroundColor:['#3563e9','#7b4fd6'], borderWidth:0}]},
+    data:{ labels:['Driver','Asst to Driver'], datasets:[{data:[d,a], backgroundColor:['#3563e9','#7b4fd6'], borderWidth:0,
+      datalabels:{
+        display:(ctx)=> ctx.dataset.data[ctx.dataIndex] > 0,
+        formatter:(v)=> total ? [String(v), `(${Math.round(v/total*100)}%)`] : [String(v)],
+        color:'#fff', font:{size:12, weight:'700'}, textAlign:'center'
+      } }]},
     options:{ responsive:true, maintainAspectRatio:false, cutout:'68%',
       plugins:{legend:{position:'bottom', labels:{boxWidth:10,usePointStyle:true}}} }
   });
@@ -458,8 +491,13 @@ function renderTopSoken(){
   upsertChart('chartTopSoken', {
     type:'bar',
     data:{ labels: soken.map(s=>s.nm.length>18? s.nm.slice(0,18)+'…':s.nm),
-      datasets:[{data:soken.map(s=>s.idr), backgroundColor:'#0f9d8ccc', borderRadius:6}]},
-    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      datasets:[{data:soken.map(s=>s.idr), backgroundColor:'#0f9d8ccc', borderRadius:6,
+        datalabels:{
+          display:true, anchor:'end', align:'end', clamp:true,
+          formatter: v => fmtRp(v),
+          font:{size:10.5, weight:'700'}, color:'#1f2937'
+        } }]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, layout:{padding:{right:52}},
       scales:{ x:{ticks:{callback:v=>(v/1e6).toFixed(1)+'Jt'}, grid:{color:'#eef0f6'}}, y:{grid:{display:false}} },
       plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>IDR(c.parsed.x)}}} }
   });
