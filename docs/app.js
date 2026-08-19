@@ -102,7 +102,7 @@ function buildSidebar(){
 
   // hub select dropdown
   const sel = document.getElementById('huSel');
-  const opts = ['<option value="ALL">All Hub</option>', '<option value="ALL_EX_PLB">All Hub (Exclude Palembang-HCI)</option>', '<option value="HCI">Hub HCI (Semua Site)</option>', '<option value="HCI_EX_PLB">Hub HCI (Exclude Palembang-HCI)</option>', '<option value="AHI">Hub AHI (Semua Site)</option>'];
+  const opts = ['<option value="ALL">All Hub</option>', '<option value="ALL_EX_PLB">All Hub (Exclude Palembang-HCI)</option>', '<option value="HCI">Hub HCI (Semua Site)</option>', '<option value="HCI_EX_PLB">Hub HCI (Exclude Palembang)</option>', '<option value="AHI">Hub AHI (Semua Site)</option>'];
   hciLocs.forEach(l=> opts.push(`<option value="loc:${l}::HCI">${(LOC_META[l]||{}).short||l} (HCI)</option>`));
   ahiLocs.forEach(l=> opts.push(`<option value="loc:${l}::AHI">${(LOC_META[l]||{}).short||l} (AHI)</option>`));
   sel.innerHTML = opts.join('');
