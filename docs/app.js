@@ -37,14 +37,21 @@ const state = {
   start: DATA_MIN, end: DATA_MAX,
   hub: 'ALL',       // 'ALL' | 'HCI' | 'AHI'
   site: null,       // specific location name or null
+  excludePalembangHci: false, // mode khusus: buang site "DC HUB PALEMBANG" (BU HCI) dari perhitungan
   view: 'overview'
 };
+
+const EXCLUDE_LOC = 'DC HUB PALEMBANG', EXCLUDE_BU = 'HCI';
+function applyExclude(rows){
+  if(!state.excludePalembangHci) return rows;
+  return rows.filter(r => !(r.loc===EXCLUDE_LOC && r.bu===EXCLUDE_BU));
+}
 
 // ================= FILTERING =================
 // state.site disimpan sebagai "LOCATION::BU" (bukan cuma nama lokasi), karena
 // beberapa site (Denpasar, Sawojajar) dipakai oleh HCI maupun AHI sekaligus.
 function filteredRecords(){
-  return RECORDS.filter(r=>{
+  const rows = RECORDS.filter(r=>{
     if(r.dt < state.start || r.dt > state.end) return false;
     if(state.site){
       const [loc,bu] = state.site.split('::');
@@ -53,6 +60,7 @@ function filteredRecords(){
     if(state.hub !== 'ALL'){ return r.bu === state.hub; }
     return true;
   });
+  return applyExclude(rows);
 }
 function siteLoc(){ return state.site ? state.site.split('::')[0] : null; }
 
@@ -64,9 +72,9 @@ function aggBase(rows){
 
 // Khusus buat "Tren OT Bulanan": selalu tampilkan seluruh periode data
 // (tidak ikut filter tanggal/bulan di atas), tapi tetap ikut filter site/hub
-// yang dipilih di sidebar/dropdown.
+// yang dipilih di sidebar/dropdown (termasuk mode exclude Palembang-HCI).
 function trendRecords(){
-  return RECORDS.filter(r=>{
+  const rows = RECORDS.filter(r=>{
     if(state.site){
       const [loc,bu] = state.site.split('::');
       return r.loc === loc && r.bu === bu;
@@ -74,6 +82,7 @@ function trendRecords(){
     if(state.hub !== 'ALL'){ return r.bu === state.hub; }
     return true;
   });
+  return applyExclude(rows);
 }
 
 // ================= SIDEBAR BUILD =================
@@ -93,7 +102,7 @@ function buildSidebar(){
 
   // hub select dropdown
   const sel = document.getElementById('huSel');
-  const opts = ['<option value="ALL">All Hub</option>', '<option value="HCI">Hub HCI (Semua Site)</option>', '<option value="AHI">Hub AHI (Semua Site)</option>'];
+  const opts = ['<option value="ALL">All Hub</option>', '<option value="ALL_EX_PLB">All Hub (Exclude Palembang-HCI)</option>', '<option value="HCI">Hub HCI (Semua Site)</option>', '<option value="HCI_EX_PLB">Hub HCI (Exclude Palembang-HCI)</option>', '<option value="AHI">Hub AHI (Semua Site)</option>'];
   hciLocs.forEach(l=> opts.push(`<option value="loc:${l}::HCI">${(LOC_META[l]||{}).short||l} (HCI)</option>`));
   ahiLocs.forEach(l=> opts.push(`<option value="loc:${l}::AHI">${(LOC_META[l]||{}).short||l} (AHI)</option>`));
   sel.innerHTML = opts.join('');
@@ -102,7 +111,7 @@ function buildSidebar(){
   // nama site yang dipakai 2 BU sekaligus, misal Denpasar & Sawojajar)
   document.querySelectorAll('.hub-item[data-site]').forEach(el=>{
     el.addEventListener('click', ()=>{
-      state.site = el.dataset.site + '::' + el.dataset.bu; state.hub = 'ALL';
+      state.site = el.dataset.site + '::' + el.dataset.bu; state.hub = 'ALL'; state.excludePalembangHci = false;
       sel.value = 'loc:' + state.site;
       setActiveSite();
       renderAll();
@@ -111,13 +120,25 @@ function buildSidebar(){
 
   // klik "All Hub" -> reset semua filter hub/site
   document.getElementById('allHubBtn').addEventListener('click', ()=>{
-    state.site=null; state.hub='ALL'; sel.value='ALL'; setActiveSite(); renderAll();
+    state.site=null; state.hub='ALL'; state.excludePalembangHci=false; sel.value='ALL'; setActiveSite(); renderAll();
+  });
+
+  // "All Hub (Exclude Palembang-HCI)" -> semua site & BU, tapi site
+  // "DC HUB PALEMBANG" khusus BU HCI dibuang dari seluruh perhitungan
+  document.getElementById('allHubExPlbBtn').addEventListener('click', ()=>{
+    state.site=null; state.hub='ALL'; state.excludePalembangHci=true; sel.value='ALL_EX_PLB'; setActiveSite(); renderAll();
+  });
+
+  // "Hub HCI Exclude Palembang-HCI" -> sama seperti klik HUB HCI biasa,
+  // tapi site "DC HUB PALEMBANG" (HCI) dibuang dari perhitungan
+  document.getElementById('hciExPlbBtn').addEventListener('click', ()=>{
+    state.site=null; state.hub='HCI'; state.excludePalembangHci=true; sel.value='HCI_EX_PLB'; setActiveSite(); renderAll();
   });
 
   // klik label "HUB HCI" / "HUB AHI" -> filter semua site dalam BU itu sekaligus
   document.querySelectorAll('.grp-filter').forEach(el=>{
     el.addEventListener('click', ()=>{
-      state.hub = el.dataset.hub; state.site = null;
+      state.hub = el.dataset.hub; state.site = null; state.excludePalembangHci = false;
       sel.value = el.dataset.hub;
       setActiveSite();
       renderAll();
@@ -138,8 +159,12 @@ function buildSidebar(){
 function setActiveSite(){
   document.querySelectorAll('.hub-item').forEach(e=>e.classList.remove('active'));
   document.querySelectorAll('.group-head').forEach(e=>e.classList.remove('selected'));
-  document.getElementById('allHubBtn').classList.remove('active');
 
+  if(state.excludePalembangHci){
+    if(state.hub==='ALL') document.getElementById('allHubExPlbBtn').classList.add('active');
+    else if(state.hub==='HCI') document.getElementById('hciExPlbBtn').classList.add('active');
+    return;
+  }
   if(state.site){
     const [loc,bu] = state.site.split('::');
     document.querySelectorAll(`.hub-item[data-site="${loc}"][data-bu="${bu}"]`).forEach(e=>e.classList.add('active'));
@@ -202,15 +227,17 @@ document.getElementById('fullMonthBtn').addEventListener('click', ()=>{
 
 document.getElementById('huSel').addEventListener('change', (e)=>{
   const v = e.target.value;
-  if(v==='ALL'){ state.hub='ALL'; state.site=null; }
-  else if(v==='HCI' || v==='AHI'){ state.hub=v; state.site=null; }
-  else if(v.startsWith('loc:')){ state.site = v.slice(4); state.hub='ALL'; } // v.slice(4) sudah format "LOC::BU"
+  if(v==='ALL'){ state.hub='ALL'; state.site=null; state.excludePalembangHci=false; }
+  else if(v==='ALL_EX_PLB'){ state.hub='ALL'; state.site=null; state.excludePalembangHci=true; }
+  else if(v==='HCI_EX_PLB'){ state.hub='HCI'; state.site=null; state.excludePalembangHci=true; }
+  else if(v==='HCI' || v==='AHI'){ state.hub=v; state.site=null; state.excludePalembangHci=false; }
+  else if(v.startsWith('loc:')){ state.site = v.slice(4); state.hub='ALL'; state.excludePalembangHci=false; } // v.slice(4) sudah format "LOC::BU"
   setActiveSite();
   renderAll();
 });
 
 document.getElementById('refreshBtn').addEventListener('click', ()=>{
-  state.start=DATA_MIN; state.end=DATA_MAX; state.hub='ALL'; state.site=null;
+  state.start=DATA_MIN; state.end=DATA_MAX; state.hub='ALL'; state.site=null; state.excludePalembangHci=false;
   dateStartEl.value=DATA_MIN; dateEndEl.value=DATA_MAX; monthSel.value='ALL'; document.getElementById('huSel').value='ALL';
   setActiveSite();
   document.getElementById('updTime').textContent = 'Update: ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -245,8 +272,10 @@ function siteAgg(rows){
 // Khusus chart "Top 10 Site": selalu bandingkan 10 site teratas se-Indonesia
 // (ikut filter tanggal, tapi TIDAK ikut filter site/hub yang lagi dipilih di
 // sidebar), supaya site yang dipilih tetap kelihatan posisinya vs yang lain.
+// Tetap ikut mode exclude Palembang-HCI kalau lagi aktif.
 function topSiteRecords(){
-  return RECORDS.filter(r => r.dt >= state.start && r.dt <= state.end);
+  const rows = RECORDS.filter(r => r.dt >= state.start && r.dt <= state.end);
+  return applyExclude(rows);
 }
 
 function IDRk(n){
@@ -319,7 +348,7 @@ function renderMap(){
       div.style.background = color;
       div.innerHTML = `<span class="nm">${meta.short||s.loc}</span><small>${IDRk(s.idr)}</small>`;
       div.addEventListener('click', ()=>{
-        state.site = s.loc + '::' + s.bu; state.hub = 'ALL';
+        state.site = s.loc + '::' + s.bu; state.hub = 'ALL'; state.excludePalembangHci = false;
         document.getElementById('huSel').value = 'loc:' + state.site;
         setActiveSite();
         renderAll();
@@ -356,7 +385,7 @@ function renderKPI(){
   document.getElementById('kpiSoken').textContent = NUM(a.soken);
   document.getElementById('kpiHour').textContent = H1(a.h)+' jam';
   document.getElementById('kpiAvg').textContent = a.soken? IDR(a.idr/a.soken) : IDR(0);
-  document.getElementById('kpiIdrSub').textContent = periodLabel();
+  document.getElementById('kpiIdrSub').textContent = periodLabel() + (state.excludePalembangHci ? ' · Exclude Palembang-HCI' : '');
   document.getElementById('kpiSokenSub').textContent = 'dari '+NUM(new Set(RECORDS.map(r=>r.id)).size)+' total karyawan';
   document.getElementById('kpiHourSub').textContent = a.rows + ' baris transaksi OT';
   document.getElementById('kpiAvgSub').textContent = 'rata-rata per karyawan';
