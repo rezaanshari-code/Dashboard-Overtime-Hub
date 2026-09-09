@@ -1,7 +1,8 @@
 let RECORDS, LOC_META;
 
 async function boot(){
-  const [recRes, locRes] = await Promise.all([fetch('data.json'), fetch('hub_coords.json')]);
+  const _v = Date.now();
+  const [recRes, locRes] = await Promise.all([fetch('data.json?v='+_v), fetch('hub_coords.json?v='+_v)]);
   RECORDS = await recRes.json();
   LOC_META = await locRes.json();
 
@@ -240,10 +241,10 @@ document.getElementById('refreshBtn').addEventListener('click', ()=>{
   state.start=DATA_MIN; state.end=DATA_MAX; state.hub='ALL'; state.site=null; state.excludePalembangHci=false;
   dateStartEl.value=DATA_MIN; dateEndEl.value=DATA_MAX; monthSel.value='ALL'; document.getElementById('huSel').value='ALL';
   setActiveSite();
-  document.getElementById('updTime').textContent = 'Update: ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  document.getElementById('updTime').textContent = 'Data s.d.: ' + DATA_MAX + ' (dimuat ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) + ')';
   renderAll();
 });
-document.getElementById('updTime').textContent = 'Update: ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+document.getElementById('updTime').textContent = 'Data s.d.: ' + DATA_MAX + ' (dimuat ' + new Date().toLocaleString('id-ID', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) + ')';
 
 // ================= MAP =================
 let map, svgOv, labelOv, markers=[], mapLayer;
