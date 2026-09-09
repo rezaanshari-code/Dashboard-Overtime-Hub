@@ -462,6 +462,20 @@ function renderJamDist(){
     });
   });
 
+  // Anti-tabrakan label: di tiap titik bulan (dataIndex), urutkan value ke-5
+  // kategori dari yang paling besar. Rank genap taruh label di atas titik,
+  // rank ganjil di bawah — dan makin banyak yang numpuk di 1 sisi, offset-nya
+  // dibikin makin jauh (bertingkat) biar nggak saling timpa.
+  const placement = cats.map(()=> new Array(keys.length));
+  keys.forEach((mk,j)=>{
+    const ranked = cats.map((c,i)=> ({i, v:pct[i][j]})).sort((a,b)=> b.v - a.v);
+    ranked.forEach((item, rank)=>{
+      const align = rank % 2 === 0 ? 'top' : 'bottom';
+      const tier = Math.floor(rank/2); // 0,0,1,1,2 -> makin dalam makin jauh offset-nya
+      placement[item.i][j] = { align, offset: 6 + tier*11 };
+    });
+  });
+
   upsertChart('chartJamDist', {
     type:'line',
     data:{ labels, datasets: cats.map((c,i)=>({
@@ -469,7 +483,10 @@ function renderJamDist(){
       borderColor:c.color, backgroundColor:c.color,
       borderWidth:2, tension:.35, pointRadius:4, pointBackgroundColor:c.color,
       datalabels:{
-        display:true, align:'top', anchor:'end', offset:6,
+        display:true,
+        align: ctx=> placement[i][ctx.dataIndex].align,
+        anchor: ctx=> placement[i][ctx.dataIndex].align,
+        offset: ctx=> placement[i][ctx.dataIndex].offset,
         formatter:v=> v.toFixed(1)+'%',
         font:{size:9.5, weight:'700'}, color:c.color,
         backgroundColor:'rgba(255,255,255,.92)', borderRadius:4, padding:{top:1,bottom:1,left:4,right:4}
