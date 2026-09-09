@@ -429,6 +429,59 @@ function renderTrend(){
   });
 }
 
+// Distribusi Jam OT per Driver: basis per-karyawan per-bulan (jumlah semua jam OT
+// dia bulan itu, gabung Driver + Asst to Driver), lalu di-bucket ke 5 kategori jam.
+// Sama seperti renderTrend(): selalu seluruh periode data (trendRecords, bukan
+// filteredRecords), tapi tetap ikut filter hub/site dari sidebar.
+function renderJamDist(){
+  const rows = trendRecords();
+  const byMonth = {}; // 'YYYY-MM' -> { employeeId: totalJamBulanItu }
+  rows.forEach(r=>{
+    const mk = r.dt.slice(0,7);
+    if(!byMonth[mk]) byMonth[mk] = {};
+    byMonth[mk][r.id] = (byMonth[mk][r.id] || 0) + r.h;
+  });
+  const keys = Object.keys(byMonth).sort();
+  const labels = keys.map(k=> MONTH_SHORT[parseInt(k.slice(5,7))-1]);
+
+  const cats = [
+    {label:'1-10j',  test:h=> h<=10,          color:'#3563e9'},
+    {label:'11-20j', test:h=> h>10 && h<=20,  color:'#0f9d8c'},
+    {label:'21-40j', test:h=> h>20 && h<=40,  color:'#e08b2e'},
+    {label:'41-72j', test:h=> h>40 && h<=72,  color:'#7b4fd6'},
+    {label:'>72j',   test:h=> h>72,           color:'#8c2f2f'}
+  ];
+
+  const pct = cats.map(()=> []);
+  keys.forEach(mk=>{
+    const totalsPerDriver = Object.values(byMonth[mk]);
+    const totalDrivers = totalsPerDriver.length;
+    cats.forEach((c,i)=>{
+      const cnt = totalsPerDriver.filter(c.test).length;
+      pct[i].push(totalDrivers ? +(cnt/totalDrivers*100).toFixed(1) : 0);
+    });
+  });
+
+  upsertChart('chartJamDist', {
+    type:'line',
+    data:{ labels, datasets: cats.map((c,i)=>({
+      label:c.label, data:pct[i],
+      borderColor:c.color, backgroundColor:c.color,
+      borderWidth:2, tension:.35, pointRadius:4, pointBackgroundColor:c.color,
+      datalabels:{
+        display:true, align:'top', anchor:'end', offset:6,
+        formatter:v=> v.toFixed(1)+'%',
+        font:{size:9.5, weight:'700'}, color:c.color,
+        backgroundColor:'rgba(255,255,255,.92)', borderRadius:4, padding:{top:1,bottom:1,left:4,right:4}
+      }
+    })) },
+    options:{ responsive:true, maintainAspectRatio:false, layout:{padding:{top:20}},
+      scales:{ y:{ ticks:{callback:v=>v+'%'}, grid:{color:'#eef0f6'}, title:{display:true,text:'% Driver Aktif',font:{size:10.5}} } },
+      plugins:{ legend:{position:'bottom', labels:{boxWidth:10,usePointStyle:true}},
+        tooltip:{callbacks:{label:c=> c.dataset.label + ': ' + c.parsed.y + '%'}} } }
+  });
+}
+
 function renderTopSite(){
   const sites = siteAgg(topSiteRecords()).slice(0,10);
 
@@ -641,7 +694,7 @@ function safeRun(fn){
 
 function renderAll(){
   if(state.view==='overview'){
-    [renderKPI, renderMap, renderTrend, renderTopSite].forEach(safeRun);
+    [renderKPI, renderMap, renderTrend, renderTopSite, renderJamDist].forEach(safeRun);
   } else if(state.view==='mpp'){
     [renderMppStats, renderJobTitleChart, renderTopSoken, renderMppTable].forEach(safeRun);
   } else if(state.view==='insight'){
