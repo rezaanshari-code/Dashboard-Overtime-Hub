@@ -198,7 +198,9 @@ dateStartEl.min = DATA_MIN; dateStartEl.max = DATA_MAX;
 dateEndEl.min = DATA_MIN; dateEndEl.max = DATA_MAX;
 
 const monthSel = document.getElementById('monthSel');
-monthSel.innerHTML = '<option value="ALL">Semua Bulan</option>' + [1,2,3,4,5,6,7].map(m=>`<option value="${m}">${MONTH_NAMES[m-1]}</option>`).join('');
+const _maxMonth = parseInt(DATA_MAX.slice(5,7), 10); // otomatis ngikutin bulan terakhir yang ada di data
+const _monthsAvail = Array.from({length:_maxMonth}, (_,i)=> i+1);
+monthSel.innerHTML = '<option value="ALL">Semua Bulan</option>' + _monthsAvail.map(m=>`<option value="${m}">${MONTH_NAMES[m-1]}</option>`).join('');
 
 document.getElementById('applyBtn').addEventListener('click', ()=>{
   state.start = dateStartEl.value || DATA_MIN;
