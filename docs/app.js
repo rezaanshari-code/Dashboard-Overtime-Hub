@@ -652,7 +652,7 @@ document.getElementById('mppNext').addEventListener('click', ()=>{ mppPage++; re
 // - "Working Hour/Day" baru terisi kalau field ai/ao (Actual In/Out, ditambahkan di
 //   sync_data.py) sudah ada di data.json hasil sync. Sebelum resync jalan, kolom ini
 //   otomatis tampil "-" (fallback aman, tidak error).
-let whPage = 0, whPageSize = 25, whFilterText = '';
+let whPage = 0, whPageSize = 20, whFilterText = '';
 
 function whMonths(){
   const endMonth = parseInt(state.end.slice(5,7), 10);
