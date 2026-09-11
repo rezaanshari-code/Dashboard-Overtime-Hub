@@ -53,6 +53,19 @@ def short_name(loc: str) -> str:
     return s.strip().title()
 
 
+def to_minutes(hhmm: str):
+    """Convert 'HH:MM' jadi menit-sejak-tengah-malam. None kalau kosong/invalid
+    (misal karyawan tidak absen hari itu)."""
+    hhmm = (hhmm or "").strip()
+    if not hhmm or ":" not in hhmm:
+        return None
+    try:
+        h, m = hhmm.split(":")[:2]
+        return int(h) * 60 + int(m)
+    except Exception:
+        return None
+
+
 def main():
     print(f"Fetching: {CSV_URL}")
     try:
@@ -70,6 +83,7 @@ def main():
     required_cols = {
         "Employee ID", "Employee Name", "OT Date", "Job Title Name",
         "Location Name", "BU", "Total OT Hour Paid", "OT (IDR)", "OT Type Name",
+        "Actual In", "Actual Out",
     }
     missing = required_cols - set(reader.fieldnames or [])
     if missing:
@@ -94,6 +108,8 @@ def main():
             idr_raw = (r.get("OT (IDR)") or "0").strip()
             h_raw = (r.get("Total OT Hour Paid") or "0").strip()
             ot_type = (r.get("OT Type Name") or "").strip()
+            ai_raw = (r.get("Actual In") or "").strip()
+            ao_raw = (r.get("Actual Out") or "").strip()
 
             if not emp_id or not date_raw or not loc:
                 skipped += 1
@@ -105,6 +121,8 @@ def main():
             idr = int(float(idr_raw.replace(",", "")))
             hours = float(h_raw.replace(",", ""))
             jt = "D" if jt_raw.upper() == "DRIVER" else "A"
+            ai_min = to_minutes(ai_raw)  # Actual In, menit sejak 00:00 (None kalau kosong)
+            ao_min = to_minutes(ao_raw)  # Actual Out, menit sejak 00:00 (None kalau kosong)
 
             # anomali BU non-standar -> masukkan ke HCI (mengikuti aturan yang sudah disepakati)
             if bu not in ("HCI", "AHI"):
@@ -117,6 +135,7 @@ def main():
             records.append({
                 "id": emp_id, "nm": nm, "dt": date_iso, "jt": jt,
                 "loc": loc, "bu": bu, "h": hours, "idr": idr, "ot": ot_type,
+                "ai": ai_min, "ao": ao_min,
             })
         except Exception as e:
             skipped += 1
