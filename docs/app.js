@@ -642,6 +642,114 @@ function renderMppTable(){
 document.getElementById('mppSearch').addEventListener('input', e=>{ mppFilterText=e.target.value; mppPage=0; renderMppTable(); });
 document.getElementById('mppPrev').addEventListener('click', ()=>{ mppPage=Math.max(0,mppPage-1); renderMppTable(); });
 document.getElementById('mppNext').addEventListener('click', ()=>{ mppPage++; renderMppTable(); });
+
+// ================= REKAP JAM KERJA & OT PER KARYAWAN (rolling 3 bulan) =================
+// - Bulan yang ditampilkan: 3 bulan terakhir dihitung mundur dari bulan aktif di
+//   filter atas (state.end selalu ke-update baik lewat dropdown "Semua Bulan/Jan../..."
+//   maupun date-range custom). Contoh: filter = Agustus -> tampil Jun, Jul, Agu.
+// - Data karyawan ikut filter hub/site sidebar (pakai trendRecords()), TIDAK ikut
+//   filter tanggal/rentang, karena rolling window-nya sendiri yang menentukan bulan.
+// - "Working Hour/Day" baru terisi kalau field ai/ao (Actual In/Out, ditambahkan di
+//   sync_data.py) sudah ada di data.json hasil sync. Sebelum resync jalan, kolom ini
+//   otomatis tampil "-" (fallback aman, tidak error).
+let whPage = 0, whPageSize = 25, whFilterText = '';
+
+function whMonths(){
+  const endMonth = parseInt(state.end.slice(5,7), 10);
+  const year = state.end.slice(0,4);
+  const months = [];
+  for(let k=2; k>=0; k--){
+    const m = endMonth - k;
+    if(m >= 1) months.push({ key:`${year}-${String(m).padStart(2,'0')}`, label:MONTH_SHORT[m-1] });
+  }
+  return months;
+}
+
+function whAgg(){
+  const months = whMonths();
+  const monthKeys = new Set(months.map(mo=>mo.key));
+  const rows = trendRecords().filter(r=> monthKeys.has(r.dt.slice(0,7)));
+  const emp = {};
+  rows.forEach(r=>{
+    if(!emp[r.id]) emp[r.id] = { id:r.id, nm:r.nm, months:{} };
+    const mk = r.dt.slice(0,7);
+    if(!emp[r.id].months[mk]) emp[r.id].months[mk] = { hSum:0, cnt:0, durSum:0, durCnt:0 };
+    const mm = emp[r.id].months[mk];
+    mm.hSum += r.h; mm.cnt += 1;
+    if(r.ai != null && r.ao != null){
+      let dur = r.ao - r.ai; if(dur < 0) dur += 1440; // durasi lewat tengah malam
+      mm.durSum += dur; mm.durCnt += 1;
+    }
+  });
+  return { months, employees: Object.values(emp) };
+}
+
+function fmtHHMMSS(totalMinutes){
+  const totalSeconds = Math.round(totalMinutes * 60);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// Render 3 sel (OT Hour/Month, OT Hour/Day, Working Hour/Day) untuk 1 employee x 1 bulan,
+// dipakai bareng baik untuk baris karyawan maupun baris Grand Total.
+function whCells(mm){
+  if(!mm) return '<td>-</td><td>-</td><td>-</td>';
+  const otMonth = mm.hSum;
+  const otDay = mm.cnt ? mm.hSum / mm.cnt : 0;
+  const hasWork = mm.durCnt > 0;
+  const workDayMin = hasWork ? mm.durSum / mm.durCnt : null;
+  const otMonthCls = otMonth > 72 ? ' class="hl-red"' : '';       // > 72 jam/bulan -> merah
+  const workCls = (workDayMin != null && workDayMin/60 > 12) ? ' class="hl-orange"' : ''; // > 12 jam/hari -> oranye
+  return `<td${otMonthCls}>${H1(otMonth)}</td><td>${H1(otDay)}</td><td${workCls}>${hasWork? fmtHHMMSS(workDayMin) : '-'}</td>`;
+}
+
+function renderWorkHourTable(){
+  const { months, employees } = whAgg();
+
+  document.getElementById('whTheadGroup').innerHTML =
+    '<th rowspan="2" class="wh-name-col">Nama Karyawan</th>' +
+    months.map(mo=>`<th colspan="3">${mo.label}</th>`).join('');
+  document.getElementById('whTheadSub').innerHTML =
+    months.map(()=> '<th>OT Hour/Month</th><th>OT Hour/Day</th><th>Working Hour/Day</th>').join('');
+
+  let list = employees;
+  if(whFilterText){
+    const q = whFilterText.toLowerCase();
+    list = list.filter(e=> e.nm.toLowerCase().includes(q) || e.id.toLowerCase().includes(q));
+  }
+  list.sort((a,b)=> a.nm.localeCompare(b.nm));
+
+  const totalPages = Math.max(1, Math.ceil(list.length / whPageSize));
+  whPage = Math.min(whPage, totalPages-1);
+  const pageRows = list.slice(whPage*whPageSize, whPage*whPageSize+whPageSize);
+
+  document.getElementById('whBody').innerHTML = pageRows.map(e=>{
+    const cells = months.map(mo=> whCells(e.months[mo.key])).join('');
+    return `<tr><td class="wh-name-col"><b>${e.nm}</b><div class="sub">${e.id}</div></td>${cells}</tr>`;
+  }).join('');
+
+  // Grand Total dihitung dari SELURUH list yang lolos filter pencarian (bukan cuma
+  // halaman yang lagi ditampilkan), biar tetap representatif walau dipaging.
+  const grand = months.map(()=> ({hSum:0, cnt:0, durSum:0, durCnt:0}));
+  list.forEach(e=>{
+    months.forEach((mo,i)=>{
+      const mm = e.months[mo.key];
+      if(mm){ grand[i].hSum+=mm.hSum; grand[i].cnt+=mm.cnt; grand[i].durSum+=mm.durSum; grand[i].durCnt+=mm.durCnt; }
+    });
+  });
+  const grandCells = grand.map(g=> whCells(g.cnt || g.durCnt ? g : null)).join('');
+  document.getElementById('whFoot').innerHTML = `<tr><td class="wh-name-col"><b>Grand Total</b></td>${grandCells}</tr>`;
+
+  document.getElementById('whPageInfo').textContent = `${list.length} karyawan · halaman ${whPage+1}/${totalPages}`;
+  document.getElementById('whPrev').disabled = whPage===0;
+  document.getElementById('whNext').disabled = whPage>=totalPages-1;
+}
+
+document.getElementById('whSearch').addEventListener('input', e=>{ whFilterText=e.target.value; whPage=0; renderWorkHourTable(); });
+document.getElementById('whPrev').addEventListener('click', ()=>{ whPage=Math.max(0,whPage-1); renderWorkHourTable(); });
+document.getElementById('whNext').addEventListener('click', ()=>{ whPage++; renderWorkHourTable(); });
 document.querySelectorAll('#mppTable th[data-k]').forEach(th=>{
   th.addEventListener('click', ()=>{
     const k = th.dataset.k;
@@ -713,7 +821,7 @@ function renderAll(){
   if(state.view==='overview'){
     [renderKPI, renderMap, renderTrend, renderTopSite, renderJamDist].forEach(safeRun);
   } else if(state.view==='mpp'){
-    [renderMppStats, renderJobTitleChart, renderTopSoken, renderMppTable].forEach(safeRun);
+    [renderMppStats, renderJobTitleChart, renderTopSoken, renderMppTable, renderWorkHourTable].forEach(safeRun);
   } else if(state.view==='insight'){
     [renderOtType, renderDow, renderBuMonth, renderSiteTable].forEach(safeRun);
   }
