@@ -193,6 +193,27 @@
             <div><button id="mppPrev">&larr; Prev</button> <button id="mppNext">Next &rarr;</button></div>
           </div>
         </div>
+
+        <div class="panel" style="margin-top:18px;">
+          <div class="panel-head">
+            <div><h2>Rekap Jam Kerja &amp; OT per Karyawan</h2><p>Rolling 3 bulan terakhir dari bulan yang dipilih di filter atas &mdash; mengikuti filter hub/site di sidebar, tidak mengikuti rentang tanggal</p></div>
+            <div class="panel-tools"><input class="searchbox" id="whSearch" placeholder="Cari nama / ID karyawan..."></div>
+          </div>
+          <div class="tbl-wrap">
+          <table class="dt" id="whTable">
+            <thead>
+              <tr id="whTheadGroup"></tr>
+              <tr id="whTheadSub"></tr>
+            </thead>
+            <tbody id="whBody"></tbody>
+            <tfoot id="whFoot"></tfoot>
+          </table>
+          </div>
+          <div class="pager">
+            <span id="whPageInfo">-</span>
+            <div><button id="whPrev">&larr; Prev</button> <button id="whNext">Next &rarr;</button></div>
+          </div>
+        </div>
       </section>
 
       <!-- ================= INSIGHT ================= -->
