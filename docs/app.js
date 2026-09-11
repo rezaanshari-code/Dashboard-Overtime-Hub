@@ -433,6 +433,27 @@ function renderTrend(){
 // dia bulan itu, gabung Driver + Asst to Driver), lalu di-bucket ke 5 kategori jam.
 // Sama seperti renderTrend(): selalu seluruh periode data (trendRecords, bukan
 // filteredRecords), tapi tetap ikut filter hub/site dari sidebar.
+// Helper anti-tabrakan label buat chart line trend banyak kategori.
+// - Value yang deket baseline (sumbu-x, dekat 0%) DIPAKSA taruh label di ATAS
+//   titik, supaya nggak pernah nimpa label bulan (Jan/Feb/dst) di sumbu-x.
+// - Sisanya diseimbangkan atas/bawah (bukan sekadar selang-seling rank), dan
+//   makin banyak yang numpuk di 1 sisi pada titik bulan yang sama, offset-nya
+//   dibikin makin jauh (bertingkat) biar label-nya nggak saling timpa.
+function computeLabelPlacement(cats, pctArrays, keys, baseline){
+  baseline = baseline == null ? 12 : baseline;
+  const placement = cats.map(()=> new Array(keys.length));
+  keys.forEach((mk,j)=>{
+    const ranked = cats.map((c,i)=> ({i, v:pctArrays[i][j]})).sort((a,b)=> b.v - a.v);
+    let topTier = 0, bottomTier = 0;
+    ranked.forEach(item=>{
+      const align = item.v <= baseline ? 'top' : (topTier <= bottomTier ? 'top' : 'bottom');
+      const tier = align==='top' ? topTier++ : bottomTier++;
+      placement[item.i][j] = { align, offset: 6 + tier*11 };
+    });
+  });
+  return placement;
+}
+
 function renderJamDist(){
   const rows = trendRecords();
   const byMonth = {}; // 'YYYY-MM' -> { employeeId: totalJamBulanItu }
@@ -444,17 +465,19 @@ function renderJamDist(){
   const keys = Object.keys(byMonth).sort();
   const labels = keys.map(k=> MONTH_SHORT[parseInt(k.slice(5,7))-1]);
 
+  // Kategori pakai jam yang sudah DIBULATKAN (Math.round: 8.999->9, 8.50->9,
+  // 8.49->8), baru dicocokkan ke rentang kategori berbasis bilangan bulat.
   const cats = [
-    {label:'1-10j',  test:h=> h<=10,          color:'#3563e9'},
-    {label:'11-20j', test:h=> h>10 && h<=20,  color:'#0f9d8c'},
-    {label:'21-40j', test:h=> h>20 && h<=40,  color:'#e08b2e'},
-    {label:'41-72j', test:h=> h>40 && h<=72,  color:'#7b4fd6'},
-    {label:'>72j',   test:h=> h>72,           color:'#8c2f2f'}
+    {label:'1-10j',  test:rh=> rh<=10,           color:'#3563e9'},
+    {label:'11-20j', test:rh=> rh>=11 && rh<=20, color:'#0f9d8c'},
+    {label:'21-40j', test:rh=> rh>=21 && rh<=40, color:'#e08b2e'},
+    {label:'41-72j', test:rh=> rh>=41 && rh<=72, color:'#7b4fd6'},
+    {label:'>72j',   test:rh=> rh>72,            color:'#8c2f2f'}
   ];
 
   const pct = cats.map(()=> []);
   keys.forEach(mk=>{
-    const totalsPerDriver = Object.values(byMonth[mk]);
+    const totalsPerDriver = Object.values(byMonth[mk]).map(Math.round);
     const totalDrivers = totalsPerDriver.length;
     cats.forEach((c,i)=>{
       const cnt = totalsPerDriver.filter(c.test).length;
@@ -462,19 +485,7 @@ function renderJamDist(){
     });
   });
 
-  // Anti-tabrakan label: di tiap titik bulan (dataIndex), urutkan value ke-5
-  // kategori dari yang paling besar. Rank genap taruh label di atas titik,
-  // rank ganjil di bawah — dan makin banyak yang numpuk di 1 sisi, offset-nya
-  // dibikin makin jauh (bertingkat) biar nggak saling timpa.
-  const placement = cats.map(()=> new Array(keys.length));
-  keys.forEach((mk,j)=>{
-    const ranked = cats.map((c,i)=> ({i, v:pct[i][j]})).sort((a,b)=> b.v - a.v);
-    ranked.forEach((item, rank)=>{
-      const align = rank % 2 === 0 ? 'top' : 'bottom';
-      const tier = Math.floor(rank/2); // 0,0,1,1,2 -> makin dalam makin jauh offset-nya
-      placement[item.i][j] = { align, offset: 6 + tier*11 };
-    });
-  });
+  const placement = computeLabelPlacement(cats, pct, keys);
 
   upsertChart('chartJamDist', {
     type:'line',
@@ -492,7 +503,71 @@ function renderJamDist(){
         backgroundColor:'rgba(255,255,255,.92)', borderRadius:4, padding:{top:1,bottom:1,left:4,right:4}
       }
     })) },
-    options:{ responsive:true, maintainAspectRatio:false, layout:{padding:{top:20}},
+    options:{ responsive:true, maintainAspectRatio:false, layout:{padding:{top:26, bottom:4}},
+      scales:{ y:{ ticks:{callback:v=>v+'%'}, grid:{color:'#eef0f6'}, title:{display:true,text:'% Driver Aktif',font:{size:10.5}} } },
+      plugins:{ legend:{position:'bottom', labels:{boxWidth:10,usePointStyle:true}},
+        tooltip:{callbacks:{label:c=> c.dataset.label + ': ' + c.parsed.y + '%'}} } }
+  });
+}
+
+// Distribusi Jam KERJA (bukan OT) per Driver — termasuk Asst Driver juga.
+// Basis: rata-rata durasi kerja per hari (Actual Out - Actual In) per
+// karyawan per bulan, dibulatkan (Math.round) ke jam bulat, lalu di-bucket.
+// Karyawan yang bulan itu sama sekali tidak punya jam Actual In/Out valid
+// tidak ikut dihitung (tidak bisa dikategorikan).
+function renderJamKerjaDist(){
+  const rows = trendRecords();
+  const byMonth = {}; // 'YYYY-MM' -> { employeeId: {durSum(menit), durCnt(hari)} }
+  rows.forEach(r=>{
+    if(r.ai == null || r.ao == null) return;
+    let dur = r.ao - r.ai; if(dur < 0) dur += 1440; // lewat tengah malam
+    const mk = r.dt.slice(0,7);
+    if(!byMonth[mk]) byMonth[mk] = {};
+    if(!byMonth[mk][r.id]) byMonth[mk][r.id] = { durSum:0, durCnt:0 };
+    byMonth[mk][r.id].durSum += dur;
+    byMonth[mk][r.id].durCnt += 1;
+  });
+  const keys = Object.keys(byMonth).sort();
+  const labels = keys.map(k=> MONTH_SHORT[parseInt(k.slice(5,7))-1]);
+
+  const cats = [
+    {label:'1-8j',   test:rh=> rh<=8,            color:'#3563e9'},
+    {label:'9-10j',  test:rh=> rh===9 || rh===10, color:'#0f9d8c'},
+    {label:'11-12j', test:rh=> rh===11 || rh===12,color:'#e08b2e'},
+    {label:'>12j',   test:rh=> rh>12,             color:'#8c2f2f'}
+  ];
+
+  const pct = cats.map(()=> []);
+  keys.forEach(mk=>{
+    const roundedPerDriver = Object.values(byMonth[mk])
+      .filter(o=> o.durCnt>0)
+      .map(o=> Math.round((o.durSum/o.durCnt)/60));
+    const totalDrivers = roundedPerDriver.length;
+    cats.forEach((c,i)=>{
+      const cnt = roundedPerDriver.filter(c.test).length;
+      pct[i].push(totalDrivers ? +(cnt/totalDrivers*100).toFixed(1) : 0);
+    });
+  });
+
+  const placement = computeLabelPlacement(cats, pct, keys);
+
+  upsertChart('chartJamKerjaDist', {
+    type:'line',
+    data:{ labels, datasets: cats.map((c,i)=>({
+      label:c.label, data:pct[i],
+      borderColor:c.color, backgroundColor:c.color,
+      borderWidth:2, tension:.35, pointRadius:4, pointBackgroundColor:c.color,
+      datalabels:{
+        display:true,
+        align: ctx=> placement[i][ctx.dataIndex].align,
+        anchor: ctx=> placement[i][ctx.dataIndex].align,
+        offset: ctx=> placement[i][ctx.dataIndex].offset,
+        formatter:v=> v.toFixed(1)+'%',
+        font:{size:9.5, weight:'700'}, color:c.color,
+        backgroundColor:'rgba(255,255,255,.92)', borderRadius:4, padding:{top:1,bottom:1,left:4,right:4}
+      }
+    })) },
+    options:{ responsive:true, maintainAspectRatio:false, layout:{padding:{top:26, bottom:4}},
       scales:{ y:{ ticks:{callback:v=>v+'%'}, grid:{color:'#eef0f6'}, title:{display:true,text:'% Driver Aktif',font:{size:10.5}} } },
       plugins:{ legend:{position:'bottom', labels:{boxWidth:10,usePointStyle:true}},
         tooltip:{callbacks:{label:c=> c.dataset.label + ': ' + c.parsed.y + '%'}} } }
@@ -819,7 +894,7 @@ function safeRun(fn){
 
 function renderAll(){
   if(state.view==='overview'){
-    [renderKPI, renderMap, renderTrend, renderTopSite, renderJamDist].forEach(safeRun);
+    [renderKPI, renderMap, renderTrend, renderTopSite, renderJamDist, renderJamKerjaDist].forEach(safeRun);
   } else if(state.view==='mpp'){
     [renderMppStats, renderJobTitleChart, renderTopSoken, renderMppTable, renderWorkHourTable].forEach(safeRun);
   } else if(state.view==='insight'){
