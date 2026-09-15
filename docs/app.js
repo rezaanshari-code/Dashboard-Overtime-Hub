@@ -455,7 +455,7 @@ function computeLabelPlacement(cats, pctArrays, keys, baseline){
 }
 
 function renderJamDist(){
-  const rows = filteredRecords(); // ikut filter tanggal/bulan + hub/site di sidebar
+  const rows = trendRecords();
   const byMonth = {}; // 'YYYY-MM' -> { employeeId: totalJamBulanItu }
   rows.forEach(r=>{
     const mk = r.dt.slice(0,7);
@@ -516,7 +516,7 @@ function renderJamDist(){
 // Karyawan yang bulan itu sama sekali tidak punya jam Actual In/Out valid
 // tidak ikut dihitung (tidak bisa dikategorikan).
 function renderJamKerjaDist(){
-  const rows = filteredRecords(); // ikut filter tanggal/bulan + hub/site di sidebar
+  const rows = trendRecords();
   const byMonth = {}; // 'YYYY-MM' -> { employeeId: {durSum(menit), durCnt(hari)} }
   rows.forEach(r=>{
     if(r.ai == null || r.ao == null) return;
