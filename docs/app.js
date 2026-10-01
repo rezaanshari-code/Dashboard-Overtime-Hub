@@ -281,6 +281,53 @@ function topSiteRecords(){
   return applyExclude(rows);
 }
 
+// ===== Helper period-sebelumnya (dipakai buat growth % di "Top 10 Site") =====
+// Geser sebuah tanggal 'YYYY-MM-DD' mundur/maju sejumlah bulan kalender.
+// Kalau tanggal asalnya "tanggal akhir bulan" (misal 30 Sep) dan bulan
+// tujuannya lebih panjang (Agustus 31 hari), day di-clamp ke tanggal
+// terakhir bulan tujuan (jadi 30, bukan ngelewatin ke 1 Sep).
+function shiftMonth(dateStr, delta){
+  const d = new Date(dateStr+'T00:00:00');
+  const target = new Date(d.getFullYear(), d.getMonth()+delta, 1);
+  const lastDayTarget = new Date(target.getFullYear(), target.getMonth()+1, 0).getDate();
+  const day = Math.min(d.getDate(), lastDayTarget);
+  return `${target.getFullYear()}-${String(target.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+function lastDayOfMonthStr(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  const last = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(last).padStart(2,'0')}`;
+}
+// Filter tanggal lagi pas 1 bulan kalender penuh? (start = tgl 1, end = tgl terakhir bulan itu)
+function isFullMonthRange(startStr, endStr){
+  const d1 = new Date(startStr+'T00:00:00');
+  if(d1.getDate() !== 1) return false;
+  return endStr === lastDayOfMonthStr(startStr);
+}
+// Hitung rentang periode sebelumnya, mengikuti 2 aturan:
+// - Filter 1 bulan penuh -> dibandingkan ke 1 bulan kalender penuh sebelumnya.
+// - Filter sebagian bulan (atau custom range apa pun) -> digeser mundur persis
+//   1 bulan kalender di kedua ujungnya, supaya jumlah hari yang dibandingkan tetap sama.
+function previousPeriodRange(){
+  if(isFullMonthRange(state.start, state.end)){
+    const prevStart = shiftMonth(state.start, -1); // tgl 1, aman dari isu clamping
+    return { start: prevStart, end: lastDayOfMonthStr(prevStart), isFullMonth:true };
+  }
+  return { start: shiftMonth(state.start,-1), end: shiftMonth(state.end,-1), isFullMonth:false };
+}
+// Label buat ditaruh di subtitle panel, pakai singkatan bulan dashboard (Agu, dst).
+function fmtPeriodLabel(prev){
+  const sd = new Date(prev.start+'T00:00:00'), ed = new Date(prev.end+'T00:00:00');
+  const monYear = m => MONTH_SHORT[m.getMonth()] + ' ' + m.getFullYear();
+  if(prev.isFullMonth) return monYear(sd);
+  if(sd.getMonth()===ed.getMonth() && sd.getFullYear()===ed.getFullYear()){
+    if(sd.getDate()===ed.getDate()) return sd.getDate() + ' ' + monYear(sd);
+    return sd.getDate() + '-' + ed.getDate() + ' ' + monYear(sd);
+  }
+  // custom range yang nyebrang 2 bulan berbeda
+  return sd.getDate()+' '+monYear(sd) + ' - ' + ed.getDate()+' '+monYear(ed);
+}
+
 function IDRk(n){
   if(n>=1e6) return 'Rp ' + (n/1e6).toLocaleString('id-ID', {maximumFractionDigits:1}) + ' Jt';
   if(n>=1e3) return 'Rp ' + (n/1e3).toLocaleString('id-ID', {maximumFractionDigits:0}) + ' Rb';
@@ -574,8 +621,33 @@ function renderJamKerjaDist(){
   });
 }
 
+// Total OT (IDR) per site di PERIODE SEBELUMNYA (lihat previousPeriodRange()),
+// dihitung dengan aturan yang sama kayak topSiteRecords() (ikut tanggal, abai
+// filter site/hub sidebar, tetap ikut mode exclude Palembang-HCI).
+function prevPeriodIdrMap(){
+  const prev = previousPeriodRange();
+  const rows = applyExclude(RECORDS.filter(r => r.dt >= prev.start && r.dt <= prev.end));
+  const m = {};
+  rows.forEach(r=>{ const k = r.loc+'|'+r.bu; m[k] = (m[k]||0) + r.idr; });
+  return { map:m, prev };
+}
+
 function renderTopSite(){
   const sites = siteAgg(topSiteRecords()).slice(0,10);
+  const { map: prevIdrMap, prev } = prevPeriodIdrMap();
+
+  // growth% per site, dibandingkan ke site YANG SAMA di periode sebelumnya.
+  // Kalau periode sebelumnya 0 (site baru / belum ada OT sama sekali), %
+  // nggak bisa dihitung (bagi nol) -> ditulis "Before 0".
+  const growthOf = (s) => {
+    const prevIdr = prevIdrMap[s.loc+'|'+s.bu] || 0;
+    if(prevIdr === 0) return 'Before 0';
+    const pct = Math.round((s.idr - prevIdr) / prevIdr * 100);
+    return (pct>0?'+':'') + pct + '%';
+  };
+
+  const noteEl = document.getElementById('topSiteGrowthNote');
+  if(noteEl) noteEl.textContent = '— growth Vs ' + fmtPeriodLabel(prev);
 
   // tandai site mana yang lagi kepilih di sidebar/dropdown, biar tetap
   // kelihatan posisinya dibanding 10 besar lainnya (bukan cuma nampilin 1 bar)
@@ -599,14 +671,16 @@ function renderTopSite(){
       datasets:[{ data: sites.map(s=>s.idr), backgroundColor: colors, borderColor: borders, borderWidth:2, borderRadius:6,
         datalabels:{
           display:true, anchor:'end', align:'end', clamp:true,
-          formatter: v => fmtJt(v),
+          formatter: (v, ctx) => fmtJt(v) + ' (' + growthOf(sites[ctx.dataIndex]) + ')',
           font:(ctx)=>({size:10.5, weight: anyFilterActive && isSelected(sites[ctx.dataIndex]) ? '800':'700'}),
           color:(ctx)=> anyFilterActive && !isSelected(sites[ctx.dataIndex]) ? '#9aa5bf' : '#1f2937'
         } }]},
-    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, layout:{padding:{right:44}},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, layout:{padding:{right:66}},
       scales:{ x:{ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}},
                y:{grid:{display:false}, ticks:{ font:(ctx)=>({ weight: anyFilterActive && isSelected(sites[ctx.index]) ? '800':'400' }) }} },
-      plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>IDR(c.parsed.x)}}} }
+      plugins:{legend:{display:false}, tooltip:{callbacks:{
+        label:c=> IDR(c.parsed.x) + '  (' + growthOf(sites[c.dataIndex]) + ' Vs ' + fmtPeriodLabel(prev) + ')'
+      }}} }
   });
 }
 
