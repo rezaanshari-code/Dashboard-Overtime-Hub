@@ -639,12 +639,18 @@ function renderTopSite(){
   // growth% per site, dibandingkan ke site YANG SAMA di periode sebelumnya.
   // Kalau periode sebelumnya 0 (site baru / belum ada OT sama sekali), %
   // nggak bisa dihitung (bagi nol) -> ditulis "Before 0".
-  const growthOf = (s) => {
+  // Warna: hijau kalau growth positif (+), merah kalau negatif (-), abu-abu
+  // netral buat "Before 0" / growth persis 0%.
+  const GROWTH_UP = '#15803d', GROWTH_DOWN = '#dc2626', GROWTH_FLAT = '#6b7280';
+  const growthInfo = (s) => {
     const prevIdr = prevIdrMap[s.loc+'|'+s.bu] || 0;
-    if(prevIdr === 0) return 'Before 0';
+    if(prevIdr === 0) return { text:'Before 0', color:GROWTH_FLAT };
     const pct = Math.round((s.idr - prevIdr) / prevIdr * 100);
-    return (pct>0?'+':'') + pct + '%';
+    if(pct > 0) return { text:'+'+pct+'%', color:GROWTH_UP };
+    if(pct < 0) return { text:pct+'%', color:GROWTH_DOWN };
+    return { text:'0%', color:GROWTH_FLAT };
   };
+  const growthOf = (s) => growthInfo(s).text; // dipakai di tooltip (teks polos)
 
   const noteEl = document.getElementById('topSiteGrowthNote');
   if(noteEl) noteEl.textContent = '— growth Vs ' + fmtPeriodLabel(prev);
@@ -671,9 +677,20 @@ function renderTopSite(){
       datasets:[{ data: sites.map(s=>s.idr), backgroundColor: colors, borderColor: borders, borderWidth:2, borderRadius:6,
         datalabels:{
           display:true, anchor:'end', align:'end', clamp:true,
-          formatter: (v, ctx) => fmtJt(v) + ' (' + growthOf(sites[ctx.dataIndex]) + ')',
-          font:(ctx)=>({size:10.5, weight: anyFilterActive && isSelected(sites[ctx.dataIndex]) ? '800':'700'}),
-          color:(ctx)=> anyFilterActive && !isSelected(sites[ctx.dataIndex]) ? '#9aa5bf' : '#1f2937'
+          // 2 baris: baris 1 nilai Rupiah, baris 2 growth-nya (chartjs-plugin-datalabels
+          // mendukung array untuk label multi-baris, termasuk warna per baris)
+          formatter: (v, ctx) => [fmtJt(v), '(' + growthInfo(sites[ctx.dataIndex]).text + ')'],
+          font:(ctx)=>{
+            const w = anyFilterActive && isSelected(sites[ctx.dataIndex]) ? '800':'700';
+            return [{size:10.5, weight:w}, {size:9, weight:'700'}];
+          },
+          color:(ctx)=>{
+            const s = sites[ctx.dataIndex];
+            const dimmed = anyFilterActive && !isSelected(s);
+            const baseColor = dimmed ? '#9aa5bf' : '#1f2937';
+            const growthColor = dimmed ? '#9aa5bf' : growthInfo(s).color;
+            return [baseColor, growthColor];
+          }
         } }]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, layout:{padding:{right:66}},
       scales:{ x:{ticks:{callback:v=>(v/1e6).toFixed(0)+'Jt'}, grid:{color:'#eef0f6'}},
