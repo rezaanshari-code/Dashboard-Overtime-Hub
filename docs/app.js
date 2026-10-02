@@ -678,19 +678,28 @@ function renderTopSite(){
       datasets:[{ data: sites.map(s=>s.idr), backgroundColor: colors, borderColor: borders, borderWidth:2, borderRadius:6,
         datalabels:{
           display:true, anchor:'end', align:'end', clamp:true,
-          // 2 baris: baris 1 nilai Rupiah, baris 2 growth-nya (chartjs-plugin-datalabels
-          // mendukung array untuk label multi-baris, termasuk warna per baris)
-          formatter: (v, ctx) => [fmtJt(v), '(' + growthInfo(sites[ctx.dataIndex]).text + ')'],
-          font:(ctx)=>{
-            const w = anyFilterActive && isSelected(sites[ctx.dataIndex]) ? '800':'700';
-            return [{size:10.5, weight:w}, {size:9, weight:'700'}];
-          },
-          color:(ctx)=>{
-            const s = sites[ctx.dataIndex];
-            const dimmed = anyFilterActive && !isSelected(s);
-            const baseColor = dimmed ? '#9aa5bf' : '#1f2937';
-            const growthColor = dimmed ? '#9aa5bf' : growthInfo(s).color;
-            return [baseColor, growthColor];
+          // 2 baris independen (bukan array 1 label 2-baris — array formatter/color
+          // di chartjs-plugin-datalabels suka salah assign warna kalau label kena
+          // clamp di tepi chart). "value" = nilai Rupiah, "growth" = %-nya, di-stack.
+          labels:{
+            value:{
+              formatter: (v) => fmtJt(v),
+              font:(ctx)=>({ size:10.5, weight: anyFilterActive && isSelected(sites[ctx.dataIndex]) ? '800':'700' }),
+              color:(ctx)=>{
+                const s = sites[ctx.dataIndex];
+                const dimmed = anyFilterActive && !isSelected(s);
+                return dimmed ? '#9aa5bf' : '#1f2937';
+              }
+            },
+            growth:{
+              formatter: (v, ctx) => '(' + growthInfo(sites[ctx.dataIndex]).text + ')',
+              font:{ size:9, weight:'700' },
+              color:(ctx)=>{
+                const s = sites[ctx.dataIndex];
+                const dimmed = anyFilterActive && !isSelected(s);
+                return dimmed ? '#9aa5bf' : growthInfo(s).color;
+              }
+            }
           }
         } }]},
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, layout:{padding:{right:66}},
