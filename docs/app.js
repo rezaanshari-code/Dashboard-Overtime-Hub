@@ -639,9 +639,10 @@ function renderTopSite(){
   // growth% per site, dibandingkan ke site YANG SAMA di periode sebelumnya.
   // Kalau periode sebelumnya 0 (site baru / belum ada OT sama sekali), %
   // nggak bisa dihitung (bagi nol) -> ditulis "Before 0".
-  // Warna: hijau kalau growth positif (+), merah kalau negatif (-), abu-abu
-  // netral buat "Before 0" / growth persis 0%.
-  const GROWTH_UP = '#15803d', GROWTH_DOWN = '#dc2626', GROWTH_FLAT = '#6b7280';
+  // Warna: hijau kalau growth turun (-, cost makin kecil = bagus), merah
+  // kalau naik (+, cost makin besar), abu-abu netral buat "Before 0" /
+  // growth persis 0%.
+  const GROWTH_DOWN = '#15803d', GROWTH_UP = '#dc2626', GROWTH_FLAT = '#6b7280';
   const growthInfo = (s) => {
     const prevIdr = prevIdrMap[s.loc+'|'+s.bu] || 0;
     if(prevIdr === 0) return { text:'Before 0', color:GROWTH_FLAT };
